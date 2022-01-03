@@ -9,7 +9,7 @@ pub struct RegisteredUser {
 use crate::schema::RegisteredUsers;
 
 #[derive(Insertable)]
-#[table_name="RegisteredUsers"]
+#[table_name = "RegisteredUsers"]
 pub struct NewRegisteredUser {
     pub auth_token: String,
     pub discord_id: i64,
@@ -31,7 +31,7 @@ pub struct CodingActivity {
 use crate::schema::CodingActivities;
 
 #[derive(Insertable)]
-#[table_name="CodingActivities"]
+#[table_name = "CodingActivities"]
 pub struct NewCodingActivity {
     pub user_id: i32,
     pub start_time: chrono::NaiveDateTime,
@@ -41,4 +41,3 @@ pub struct NewCodingActivity {
     pub editor_name: Option<String>,
     pub hostname: Option<String>,
 }
-
