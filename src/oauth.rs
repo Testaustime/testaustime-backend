@@ -1,13 +1,18 @@
-use oauth2::basic::BasicClient;
-use oauth2::reqwest::async_http_client;
-use oauth2::{AuthorizationCode, CsrfToken, Scope};
-use oauth2::TokenResponse;
-use rocket::response::Redirect;
+use oauth2::{
+    basic::BasicClient, reqwest::async_http_client, AuthorizationCode, CsrfToken, Scope,
+    TokenResponse,
+};
+use rocket::{
+    http::{Cookie, CookieJar},
+    response::Redirect,
+    State,
+};
 use serde_json::Value;
-use rocket::State;
+
+use crate::database::Database;
 
 #[get("/discord")]
-pub fn authorize(client: &State<BasicClient>) -> Redirect {
+pub async fn authorize(client: &State<BasicClient>) -> Redirect {
     let (auth_url, _) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
@@ -17,7 +22,12 @@ pub fn authorize(client: &State<BasicClient>) -> Redirect {
 }
 
 #[get("/discord/callback?<code>")]
-pub async fn callback(client: &State<BasicClient>, code: String) -> String {
+pub async fn callback(
+    client: &State<BasicClient>,
+    code: String,
+    cookies: &CookieJar<'_>,
+    database: &State<Database>,
+) -> String {
     let token_result = client
         .exchange_code(AuthorizationCode::new(code))
         .request_async(async_http_client)
@@ -25,7 +35,8 @@ pub async fn callback(client: &State<BasicClient>, code: String) -> String {
         .unwrap();
 
     let http_client = reqwest::Client::new();
-    let res = http_client.get("https://discord.com/api/users/@me")
+    let res = http_client
+        .get("https://discord.com/api/users/@me")
         .bearer_auth(token_result.access_token().secret())
         .send()
         .await
@@ -34,5 +45,6 @@ pub async fn callback(client: &State<BasicClient>, code: String) -> String {
         .await
         .unwrap();
 
+    cookies.add(Cookie::new("message", "balls"));
     res["id"].to_string()
 }
