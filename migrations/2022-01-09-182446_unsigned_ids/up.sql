@@ -1,0 +1,2 @@
+ALTER TABLE RegisteredUsers
+MODIFY discord_id BIGINT UNSIGNED NOT NULL;
