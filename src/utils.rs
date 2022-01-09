@@ -1,7 +1,7 @@
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
 
-fn generate_token() -> String {
+pub fn generate_token() -> String {
     thread_rng()
         .sample_iter(&Alphanumeric)
         .take(32)

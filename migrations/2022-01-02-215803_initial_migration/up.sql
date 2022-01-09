@@ -1,5 +1,5 @@
 CREATE TABLE RegisteredUsers(
-    id INTEGER NOT NULL UNIQUE,
+    id INTEGER NOT NULL UNIQUE AUTO_INCREMENT,
     auth_token TEXT NOT NULL,
     user_name TEXT NOT NULL,
     discord_id BIGINT NOT NULL,

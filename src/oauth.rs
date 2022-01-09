@@ -3,11 +3,11 @@ use oauth2::{
     TokenResponse,
 };
 use rocket::{
-    http::{Cookie, CookieJar},
+    http::{Cookie, CookieJar, Status},
     response::Redirect,
     State,
 };
-use serde_json::Value;
+use serde::Deserialize;
 
 use crate::database::Database;
 
@@ -21,13 +21,18 @@ pub async fn authorize(client: &State<BasicClient>) -> Redirect {
     Redirect::to(String::from(auth_url.as_str()))
 }
 
+#[derive(Deserialize, Debug)]
+struct DiscordUser {
+    pub id: String
+}
+
 #[get("/discord/callback?<code>")]
 pub async fn callback(
     client: &State<BasicClient>,
     code: String,
     cookies: &CookieJar<'_>,
     database: &State<Database>,
-) -> String {
+) -> Result<String, Status> {
     let token_result = client
         .exchange_code(AuthorizationCode::new(code))
         .request_async(async_http_client)
@@ -41,10 +46,17 @@ pub async fn callback(
         .send()
         .await
         .unwrap()
-        .json::<Value>()
+        .json::<DiscordUser>()
         .await
         .unwrap();
 
+    let user;
+    if let Some(user) = database.get_user_by_discord_id(res.id.parse().unwrap()).await.unwrap() {
+    } else {
+        user = database.new_user(res.id.parse().unwrap()).await.unwrap();
+    }
+
+
     cookies.add(Cookie::new("message", "balls"));
-    res["id"].to_string()
+    Ok(res.id)
 }

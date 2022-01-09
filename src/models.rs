@@ -2,6 +2,7 @@
 pub struct RegisteredUser {
     pub id: i32,
     pub auth_token: String,
+    pub user_name: String,
     pub discord_id: u64,
     pub registration_time: chrono::NaiveDateTime,
 }
@@ -12,6 +13,7 @@ use crate::schema::RegisteredUsers;
 #[table_name = "RegisteredUsers"]
 pub struct NewRegisteredUser {
     pub auth_token: String,
+    pub user_name: String,
     pub discord_id: u64,
     pub registration_time: chrono::NaiveDateTime,
 }

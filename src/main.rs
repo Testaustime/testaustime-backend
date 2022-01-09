@@ -2,6 +2,7 @@ mod database;
 pub mod models;
 pub mod oauth;
 pub mod schema;
+mod utils;
 
 #[macro_use]
 extern crate diesel;
@@ -21,9 +22,9 @@ fn index(cookies: &CookieJar<'_>) -> String {
 }
 
 #[launch]
-fn rocket() -> _ {
+async fn rocket() -> _ {
     dotenv::dotenv().ok();
-    let database = database::Database::new();
+    let database = database::Database::new().await;
     let client = BasicClient::new(
         ClientId::new(dotenv::var("DISCORD_CLIENT_ID").unwrap()),
         Some(ClientSecret::new(
