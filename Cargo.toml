@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-diesel = {version = "1.4", features = ["mysql", "chrono", "r2d2"]}
-rocket = "0.5.0-rc.1"
+diesel = { version = "1.4", features = ["mysql", "chrono", "r2d2"] }
+rocket = { version = "0.5.0-rc.1", features = ["secrets"] }
 chrono = "0.4"
 oauth2 = "4.1"
 dotenv = "0.15"

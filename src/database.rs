@@ -11,7 +11,7 @@ pub struct Database {
 use crate::models::*;
 
 impl Database {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
         let manager = ConnectionManager::<MysqlConnection>::new(&database_url);

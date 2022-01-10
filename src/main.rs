@@ -16,15 +16,15 @@ use rocket::http::CookieJar;
 #[get("/")]
 fn index(cookies: &CookieJar<'_>) -> String {
     cookies
-        .get("message")
+        .get_private("message")
         .map(|crumb| format!("Message: {}", crumb.value()))
         .unwrap()
 }
 
 #[launch]
-async fn rocket() -> _ {
+fn rocket() -> _ {
     dotenv::dotenv().ok();
-    let database = database::Database::new().await;
+    let database = database::Database::new();
     let client = BasicClient::new(
         ClientId::new(dotenv::var("DISCORD_CLIENT_ID").unwrap()),
         Some(ClientSecret::new(

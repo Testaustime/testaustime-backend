@@ -7,7 +7,7 @@ use rocket::{
     response::Redirect,
     State,
 };
-use serde::Deserialize;
+use serde::{ Deserialize, Serialize };
 
 use crate::database::Database;
 
@@ -49,14 +49,11 @@ pub async fn callback(
         .json::<DiscordUser>()
         .await
         .unwrap();
-
-    let user;
-    if let Some(user) = database.get_user_by_discord_id(res.id.parse().unwrap()).await.unwrap() {
+    if let Some(user) = database.get_user_by_discord_id(res.id.parse::<u64>().unwrap()).await.unwrap() {
     } else {
-        user = database.new_user(res.id.parse().unwrap()).await.unwrap();
+        database.new_user(res.id.parse::<u64>().unwrap()).await.unwrap();
     }
 
-
-    cookies.add(Cookie::new("message", "balls"));
+    cookies.add_private(Cookie::new("message", "balls"));
     Ok(res.id)
 }

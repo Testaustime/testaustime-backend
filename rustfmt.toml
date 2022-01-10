@@ -1,4 +1,4 @@
 edition = "2021"
-imports_granularity = "Module"
+imports_granularity = "Crate"
 group_imports = "StdExternalCrate"
 unstable_features = true
