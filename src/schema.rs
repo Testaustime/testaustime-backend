@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 table! {
     CodingActivities (id) {
         id -> Integer,
@@ -24,7 +23,4 @@ table! {
 
 joinable!(CodingActivities -> RegisteredUsers (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    CodingActivities,
-    RegisteredUsers,
-);
+allow_tables_to_appear_in_same_query!(CodingActivities, RegisteredUsers,);

@@ -7,7 +7,7 @@ use rocket::{
     response::Redirect,
     State,
 };
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 use crate::database::Database;
 
@@ -23,12 +23,12 @@ pub async fn authorize(client: &State<BasicClient>) -> Redirect {
 
 #[derive(Deserialize, Debug)]
 struct DiscordUser {
-    pub id: String
+    pub id: String,
 }
 
 #[get("/discord/callback?<code>")]
 pub async fn callback(
-    client: &State<BasicClient>,
+    client: Data<BasicClient>,
     code: String,
     cookies: &CookieJar<'_>,
     database: &State<Database>,
@@ -49,11 +49,19 @@ pub async fn callback(
         .json::<DiscordUser>()
         .await
         .unwrap();
-    if let Some(user) = database.get_user_by_discord_id(res.id.parse::<u64>().unwrap()).await.unwrap() {
+    let user = if let Some(user) = database
+        .get_user_by_discord_id(res.id.parse::<u64>().unwrap())
+        .await
+        .unwrap()
+    {
+        user
     } else {
-        database.new_user(res.id.parse::<u64>().unwrap()).await.unwrap();
-    }
+        database
+            .new_user(res.id.parse::<u64>().unwrap())
+            .await
+            .unwrap()
+    };
+    cookies.add_private(Cookie::new("testaustime_token", user.auth_token));
 
-    cookies.add_private(Cookie::new("message", "balls"));
     Ok(res.id)
 }

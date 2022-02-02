@@ -1,5 +1,4 @@
-use rand::{thread_rng, Rng};
-use rand::distributions::Alphanumeric;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
 pub fn generate_token() -> String {
     thread_rng()
