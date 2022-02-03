@@ -1,0 +1,2 @@
+ALTER TABLE RegisteredUsers
+MODIFY auth_token TEXT UNIQUE NOT NULL;

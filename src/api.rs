@@ -1,13 +1,11 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use actix_web::{
-    FromRequest,
     dev::Payload,
     error::*,
-    Error,
     http::header::ContentType,
     web::{Data, Json},
-    HttpRequest, HttpResponse, Responder,
+    Error, FromRequest, HttpRequest, HttpResponse, Responder,
 };
 use oauth2::{
     basic::BasicClient, reqwest::async_http_client, AuthorizationCode, CsrfToken, Scope,
@@ -15,13 +13,7 @@ use oauth2::{
 };
 use serde_derive::{Deserialize, Serialize};
 
-use crate::database::User;
-
-use std::future::Future;
-use std::pin::Pin;
-
-use crate::database::Database;
-
+use crate::{database::Database, user::User};
 
 impl FromRequest for User {
     type Error = Error;
@@ -35,7 +27,7 @@ impl FromRequest for User {
             if let Some(auth) = headers.get("Authorization") {
                 let auth = auth.to_str().unwrap();
                 if let Some(token) = auth.trim().strip_prefix("Bearer ") {
-                    if let Ok(user) = db.get_user_by_token(token).await {
+                    if let Ok(user) = db.get_user_by_token(token) {
                         Ok(user)
                     } else {
                         Err(ErrorUnauthorized("Unauthorized"))
@@ -45,20 +37,25 @@ impl FromRequest for User {
                 }
             } else {
                 Err(ErrorUnauthorized("unauthorized"))
-            };
+            }
         })
     }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct HeartBeat {
-    project_name: Option<String>,
-    language: Option<String>,
-    editor_name: Option<String>,
-    hostname: Option<String>,
+    pub project_name: Option<String>,
+    pub language: Option<String>,
+    pub editor_name: Option<String>,
+    pub hostname: Option<String>,
 }
 
-#[post("/update_activity")]
-pub async fn activity(user: User, heartbeat: Json<HeartBeat>, db: Data<Database>) -> impl Responder {
-    format!("{:?} sent {:?}", user, heartbeat.project_name)
+#[post("/activity/update")]
+pub async fn activity(
+    user: User,
+    heartbeat: Json<HeartBeat>,
+    db: Data<Database>,
+) -> impl Responder {
+    db.update_activity(user.0, heartbeat.into_inner()).unwrap();
+    HttpResponse::Ok()
 }

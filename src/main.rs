@@ -2,10 +2,12 @@ mod api;
 mod database;
 pub mod models;
 pub mod schema;
+mod user;
 mod utils;
 
-use actix_web::{dev::ServiceRequest,Error,get, middleware::Logger, web, web::Data, App, HttpServer, Responder};
-use actix_web_httpauth::{extractors::bearer::BearerAuth,middleware::HttpAuthentication};
+use actix_web::{
+    dev::ServiceRequest, get, middleware::Logger, web, web::Data, App, Error, HttpServer, Responder,
+};
 
 #[macro_use]
 extern crate actix_web;
@@ -16,20 +18,12 @@ extern crate log;
 #[macro_use]
 extern crate diesel;
 
-use std::sync::{Arc,Mutex};
+use std::sync::{Arc, Mutex};
 
 use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
 
-async fn validator(
-    req: ServiceRequest,
-    credentials: BearerAuth
-) -> Result<ServiceRequest, Error> {
-    Ok(req)
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "actix_web=info");
     dotenv::dotenv().ok();
 
     let client = BasicClient::new(
@@ -46,7 +40,6 @@ async fn main() -> std::io::Result<()> {
         let database = database::Database::new();
         App::new()
             .wrap(Logger::default())
-            .wrap(HttpAuthentication::bearer(validator))
             .service(api::activity)
             .app_data(Data::new(database))
     })
