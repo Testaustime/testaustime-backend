@@ -46,7 +46,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(Data::new(database))
             .app_data(Data::new(heartbeat_store))
     })
-    .bind("localhost:8000")?
+    .bind(dotenv::var("TESTAUSTIME_ADDRESS").unwrap())?
     .run()
     .await
 }
