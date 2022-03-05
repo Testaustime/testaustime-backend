@@ -69,10 +69,11 @@ pub async fn update(
     db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> impl Responder {
-    let heartbeat = heartbeat.into_inner();
+    let heartbeat = heartbeat;
+    dbg!(&heartbeats);
     match heartbeats.get(&user) {
         Some(test) => {
-            let (inner_heartbeat, start, duration) = test.clone();
+            let (inner_heartbeat, start, duration) = test.to_owned();
             drop(test);
             let (start, duration) = (start, duration);
             let curtime = Local::now().naive_local();
@@ -84,28 +85,48 @@ pub async fn update(
                     };
                     heartbeats.insert(
                         user,
-                        (heartbeat, Local::now().naive_local(), Duration::seconds(0)),
+                        (
+                            heartbeat.into_inner(),
+                            Local::now().naive_local(),
+                            Duration::seconds(0),
+                        ),
                     );
                     res
                 } else {
                     heartbeats.insert(
                         user,
-                        (heartbeat, start, curtime.signed_duration_since(start)),
+                        (
+                            heartbeat.into_inner(),
+                            start,
+                            curtime.signed_duration_since(start),
+                        ),
                     );
                     HttpResponse::Ok().finish()
                 }
             } else {
+                let res = match db.add_activity(user.0, heartbeat.clone(), start, duration) {
+                    Ok(_) => HttpResponse::Ok().finish(),
+                    Err(_) => HttpResponse::InternalServerError().finish(),
+                };
                 heartbeats.insert(
                     user,
-                    (heartbeat, start, curtime.signed_duration_since(start)),
+                    (
+                        heartbeat.into_inner(),
+                        start,
+                        curtime.signed_duration_since(start),
+                    ),
                 );
-                HttpResponse::Ok().finish()
+                res
             }
         }
         None => {
             heartbeats.insert(
                 user,
-                (heartbeat, Local::now().naive_local(), Duration::seconds(0)),
+                (
+                    heartbeat.into_inner(),
+                    Local::now().naive_local(),
+                    Duration::seconds(0),
+                ),
             );
             HttpResponse::Ok().finish()
         }

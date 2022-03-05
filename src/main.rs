@@ -36,15 +36,15 @@ async fn main() -> std::io::Result<()> {
     )
     .set_redirect_uri(RedirectUrl::new(dotenv::var("DISCORD_REDIRECT_URI").unwrap()).unwrap());
 
+    let database = Data::new(database::Database::new());
+    let heartbeat_store = Data::new(api::HeartBeatMemoryStore::new());
     HttpServer::new(move || {
-        let database = database::Database::new();
-        let heartbeat_store = api::HeartBeatMemoryStore::default();
         App::new()
             .wrap(Logger::default())
             .service(api::update)
             .service(api::get_activities)
-            .app_data(Data::new(database))
-            .app_data(Data::new(heartbeat_store))
+            .app_data(Data::clone(&database))
+            .app_data(Data::clone(&heartbeat_store))
     })
     .bind(dotenv::var("TESTAUSTIME_ADDRESS").unwrap())?
     .run()
