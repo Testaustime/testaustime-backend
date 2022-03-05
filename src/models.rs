@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 #[derive(Queryable, Clone, Debug)]
 pub struct RegisteredUser {
     pub id: i32,
@@ -18,9 +20,11 @@ pub struct NewRegisteredUser {
     pub registration_time: chrono::NaiveDateTime,
 }
 
-#[derive(Queryable, Clone, Debug)]
+#[derive(Queryable, Clone, Debug, Serialize)]
 pub struct CodingActivity {
+    #[serde(skip_serializing)]
     pub id: i32,
+    #[serde(skip_serializing)]
     pub user_id: i32,
     pub start_time: chrono::NaiveDateTime,
     pub duration: i32,

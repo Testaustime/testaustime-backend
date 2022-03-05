@@ -6,14 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = { version = "4.0.0-rc.2", features = ["openssl", "macros"] }
+actix-web = { version = "4.0.0-rc.2", features = ["macros","openssl"] }
+actix = "0.13"
+dashmap = "5.1"
 log = "0.4"
-diesel = { version = "1.4", features = ["mysql", "chrono", "r2d2"] }
+diesel = { version = "1.4.8", features = ["mysql", "chrono", "r2d2"] }
 chrono = "0.4"
-oauth2 = "4.1"
+oauth2 = { version = "4.1" }
 dotenv = "0.15"
 url = "2.2"
-reqwest = {version = "0.11", features = ["json"]}
+reqwest = { version = "0.11", features = ["json"] }
 rand = "0.8"
 
 serde = "1.0"

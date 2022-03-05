@@ -1,3 +1,5 @@
+#![feature(let_else)]
+
 mod api;
 mod database;
 pub mod models;
@@ -18,8 +20,6 @@ extern crate log;
 #[macro_use]
 extern crate diesel;
 
-use std::sync::{Arc, Mutex};
-
 use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
 
 #[actix_web::main]
@@ -38,10 +38,13 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let database = database::Database::new();
+        let heartbeat_store = api::HeartBeatMemoryStore::default();
         App::new()
             .wrap(Logger::default())
-            .service(api::activity)
+            .service(api::update)
+            .service(api::get_activities)
             .app_data(Data::new(database))
+            .app_data(Data::new(heartbeat_store))
     })
     .bind("localhost:8000")?
     .run()
