@@ -72,8 +72,9 @@ pub async fn update(
     let heartbeat = heartbeat.into_inner();
     match heartbeats.get(&user) {
         Some(test) => {
-            let (inner_heartbeat, start, duration) = test.value();
-            let (start, duration) = (*start, *duration);
+            let (inner_heartbeat, start, duration) = test.clone();
+            drop(test);
+            let (start, duration) = (start, duration);
             let curtime = Local::now().naive_local();
             if heartbeat.eq(&inner_heartbeat) {
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
