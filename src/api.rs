@@ -112,8 +112,8 @@ pub async fn update(
                     user,
                     (
                         heartbeat.into_inner(),
-                        start,
-                        curtime.signed_duration_since(start),
+                        Local::now().naive_local(),
+                        Duration::seconds(0),
                     ),
                 );
                 res
