@@ -78,10 +78,11 @@ pub async fn update(
             let curtime = Local::now().naive_local();
             if heartbeat.eq(&inner_heartbeat) {
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
-                    let res = match db.add_activity(user.0, heartbeat.clone(), start, duration) {
-                        Ok(_) => HttpResponse::Ok().finish(),
-                        Err(_) => HttpResponse::InternalServerError().finish(),
-                    };
+                    let res =
+                        match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
+                            Ok(_) => HttpResponse::Ok().finish(),
+                            Err(_) => HttpResponse::InternalServerError().finish(),
+                        };
                     heartbeats.insert(
                         user,
                         (
@@ -103,7 +104,7 @@ pub async fn update(
                     HttpResponse::Ok().finish()
                 }
             } else {
-                let res = match db.add_activity(user.0, heartbeat.clone(), start, duration) {
+                let res = match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
                     Ok(_) => HttpResponse::Ok().finish(),
                     Err(_) => HttpResponse::InternalServerError().finish(),
                 };
