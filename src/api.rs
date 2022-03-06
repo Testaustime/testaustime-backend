@@ -70,7 +70,6 @@ pub async fn update(
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> impl Responder {
     let heartbeat = heartbeat;
-    dbg!(&heartbeats);
     match heartbeats.get(&user) {
         Some(test) => {
             let (inner_heartbeat, start, duration) = test.to_owned();
