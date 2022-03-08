@@ -110,6 +110,9 @@ impl Database {
         if let Some(request_language) = request.language {
             query = query.filter(language.eq(request_language));
         };
+        if let Some(min_duration) = request.min_duration {
+            query = query.filter(duration.ge(min_duration));
+        };
         let res = query.load::<CodingActivity>(&self.pool.get()?).unwrap();
         Ok(res)
     }

@@ -1,4 +1,4 @@
-use std::{future::Future, ops::Add, pin::Pin};
+use std::{future::Future, pin::Pin};
 
 use actix_web::{
     dev::Payload,
@@ -20,6 +20,7 @@ pub struct DataRequest {
     #[serde(default)]
     #[serde(with = "ts_seconds_option")]
     pub to: Option<DateTime<Utc>>,
+    pub min_duration: Option<i32>,
     pub editor_name: Option<String>,
     pub language: Option<String>,
     pub hostname: Option<String>,
@@ -78,6 +79,8 @@ pub async fn update(
             let curtime = Local::now().naive_local();
             if heartbeat.eq(&inner_heartbeat) {
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
+                    // If the user sends a heartbeat but maximum activity duration has been exceeded,
+                    // end session and start new
                     let res =
                         match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
                             Ok(_) => HttpResponse::Ok().finish(),
@@ -93,6 +96,7 @@ pub async fn update(
                     );
                     res
                 } else {
+                    // Extend current coding session if heartbeat matches and it has been under the maximum duration of a break
                     heartbeats.insert(
                         user,
                         (
@@ -104,6 +108,7 @@ pub async fn update(
                     HttpResponse::Ok().finish()
                 }
             } else {
+                // Flush current session and start new session if heartbeat changes
                 let res = match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
                     Ok(_) => HttpResponse::Ok().finish(),
                     Err(_) => HttpResponse::InternalServerError().finish(),
@@ -120,6 +125,7 @@ pub async fn update(
             }
         }
         None => {
+            // If the user has not sent a heartbeat during this session
             heartbeats.insert(
                 user,
                 (
