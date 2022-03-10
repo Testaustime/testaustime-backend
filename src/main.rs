@@ -3,7 +3,6 @@
 mod api;
 mod database;
 pub mod models;
-mod ratelimiter;
 pub mod schema;
 mod user;
 mod utils;
@@ -12,6 +11,7 @@ use std::collections::HashMap;
 
 use actix::prelude::*;
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
+use testausratelimiter::*;
 
 #[macro_use]
 extern crate actix_web;
@@ -26,7 +26,7 @@ extern crate diesel;
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
 
-    ratelimiter::RateLimiterStorage {
+    RateLimiterStorage {
         clients: HashMap::new(),
         maxrpm: 10,
     }
@@ -38,10 +38,10 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or("10".to_string())
         .parse::<i32>()
         .expect("Invalid request");
-    let ratelimiter = ratelimiter::RateLimiterStorage::new(maxrpm).start();
+    let ratelimiter = RateLimiterStorage::new(maxrpm).start();
     HttpServer::new(move || {
         App::new()
-            .wrap(ratelimiter::RateLimiter {
+            .wrap(RateLimiter {
                 storage: ratelimiter.clone(),
             })
             .wrap(Logger::default())
