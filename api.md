@@ -70,3 +70,48 @@ Required headers:
 Authorization: Bearer <token>
 Content-type: application/json
 ```
+
+### POST /users/register
+
+Registers a new user and returns the users auth token
+
+Accepts:
+```
+{
+    "username": string,
+    "password": string
+}
+```
+
+Required headers:
+```
+Content-type: application/json
+```
+
+Returns:
+```
+<AUTHTOKEN>
+```
+
+### POST /users/login
+
+Logins to a users account returning the auth token
+
+Accepts:
+```
+{
+    "username": string,
+    "password": string
+}
+```
+
+Required headers:
+```
+Content-type: application/json
+```
+
+Returns:
+```
+<AUTHTOKEN>
+```
+
