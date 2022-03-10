@@ -94,7 +94,7 @@ impl Database {
             registration_time: chrono::Local::now().naive_local(),
             user_name: username.to_string(),
             password: hash.as_bytes(),
-            salt: dbg!(salt.as_bytes()),
+            salt: salt.as_bytes(),
         };
         diesel::insert_into(crate::schema::RegisteredUsers::table)
             .values(&new_user)
