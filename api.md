@@ -4,6 +4,8 @@
 
 - Ratelimit: 10 req/m
 
+The desired interval at which to send heartbeats is immidiately when editing a file, and after that at max every 30 seconds, and only when the user does something actively in the editor.
+
 ## Endpoints
 
 ### POST /activity/update
@@ -41,7 +43,7 @@ Authorization: Bearer <token>
 
 Get your coding activity data
 
-Rul params:
+Url params:
 - language
 - editor
 - project_name
