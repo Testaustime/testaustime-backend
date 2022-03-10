@@ -46,6 +46,7 @@ async fn main() -> std::io::Result<()> {
             })
             .wrap(Logger::default())
             .service(api::update)
+            .service(api::flush)
             .service(api::get_activities)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))

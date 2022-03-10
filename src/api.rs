@@ -139,6 +139,26 @@ pub async fn update(
     }
 }
 
+#[post("/activity/flush")]
+pub async fn flush(
+    user: UserId,
+    db: Data<Database>,
+    heartbeats: Data<HeartBeatMemoryStore>,
+) -> impl Responder {
+    match heartbeats.get(&user) {
+        Some(flushme) => {
+            let (inner_heartbeat, start, duration) = flushme.to_owned();
+            drop(flushme);
+            heartbeats.remove(&user);
+            match db.add_activity(user.0, inner_heartbeat, start, duration) {
+                Ok(_) => HttpResponse::Ok().finish(),
+                Err(_) => HttpResponse::InternalServerError().finish(),
+            }
+        }
+        None => HttpResponse::Ok().finish(),
+    }
+}
+
 // TODO: Implement requests for getting the data of users other than the current user
 #[get("/activity/data")]
 pub async fn get_activities(
