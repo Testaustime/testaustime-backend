@@ -30,6 +30,7 @@ pub struct DataRequest {
 #[derive(Deserialize)]
 pub struct RegisterRequest {
     username: String,
+    password: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Hash, Eq, PartialEq, Clone)]
@@ -170,9 +171,22 @@ pub async fn get_activities(
     web::Json(data)
 }
 
+#[post("/users/register")]
 pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> impl Responder {
-    match db.new_user(&data.username) {
-        Ok(user) => HttpResponse::Ok().body(user),
+    match db.new_user(&data.username, &data.password) {
+        Ok(token) => HttpResponse::Ok().body(token),
         Err(e) => HttpResponse::InternalServerError().body(format!("{}", e)),
+    }
+}
+
+#[post("/users/login")]
+pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> impl Responder {
+    match db.get_user_by_name(&data.username) {
+        Ok(user) => match db.verify_user_password(&data.username, &data.password) {
+            Ok(true) => HttpResponse::Ok().body(user.auth_token),
+            Ok(false) => HttpResponse::Unauthorized().body("Invalid password or username"),
+            Err(e) => HttpResponse::InternalServerError().body(format!("{}", e)),
+        },
+        Err(_) => HttpResponse::Unauthorized().body("No such user"),
     }
 }

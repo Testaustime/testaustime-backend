@@ -16,6 +16,8 @@ table! {
         id -> Integer,
         auth_token -> Text,
         user_name -> Text,
+        password -> Binary,
+        salt -> Binary,
         discord_id -> Unsigned<Bigint>,
         registration_time -> Datetime,
     }

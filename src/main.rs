@@ -48,6 +48,8 @@ async fn main() -> std::io::Result<()> {
             .service(api::update)
             .service(api::flush)
             .service(api::get_activities)
+            .service(api::register)
+            .service(api::login)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })
