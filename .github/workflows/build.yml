@@ -3,6 +3,10 @@ name: Build
 on:
   push:
     branches: [ main ]
+    paths:
+      - '**.rs'
+      - '**.sql'
+      - '**.toml'
     
 jobs:
   build:
