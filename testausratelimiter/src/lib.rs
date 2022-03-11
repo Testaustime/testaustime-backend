@@ -101,7 +101,7 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let conn_info = req.connection_info().clone();
         let res = self.ratelimiter.send(Request {
-            ip: conn_info.peer_addr().unwrap().to_string(),
+            ip: conn_info.realip_remote_addr().unwrap().to_string(),
         });
         let resp = self.service.call(req);
         Box::pin(async move {
