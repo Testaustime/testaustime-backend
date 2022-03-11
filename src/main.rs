@@ -45,7 +45,9 @@ async fn main() -> std::io::Result<()> {
             .wrap(RateLimiter {
                 storage: ratelimiter.clone(),
             })
-            .wrap(Logger::default())
+            .wrap(Logger::new(
+                r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T"#,
+            ))
             .service(api::update)
             .service(api::flush)
             .service(api::get_activities)
