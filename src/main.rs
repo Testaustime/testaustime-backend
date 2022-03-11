@@ -25,6 +25,7 @@ extern crate diesel;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+    env_logger::init();
 
     RateLimiterStorage {
         clients: HashMap::new(),
