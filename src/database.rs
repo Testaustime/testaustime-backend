@@ -79,6 +79,16 @@ impl Database {
         return Ok(password_hash.hash.unwrap().as_bytes() == hash);
     }
 
+    pub fn regenerate_token(&self, userid: UserId) -> Result<String, anyhow::Error> {
+        let token = crate::utils::generate_token();
+        use crate::schema::RegisteredUsers::dsl::*;
+        diesel::update(crate::schema::RegisteredUsers::table)
+            .filter(id.eq(userid.0))
+            .set(auth_token.eq(&token))
+            .execute(&self.pool.get()?)?;
+        Ok(token)
+    }
+
     pub fn new_user(&self, username: &str, password: &str) -> Result<String, anyhow::Error> {
         if self.user_exists(username)? {
             return Err(anyhow::anyhow!("User exists"));

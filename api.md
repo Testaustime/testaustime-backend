@@ -115,3 +115,16 @@ Returns:
 <AUTHTOKEN>
 ```
 
+### POST /users/regenerate
+
+Regenerate users auth token
+
+Required headers:
+```
+Authorization: Bearer <token>
+```
+
+Returns:
+```
+<NEWAUTHTOKEN>
+```

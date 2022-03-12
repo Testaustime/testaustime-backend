@@ -53,6 +53,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::get_activities)
             .service(api::register)
             .service(api::login)
+            .service(api::regenerate)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })

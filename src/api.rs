@@ -190,3 +190,11 @@ pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> impl Resp
         Err(_) => HttpResponse::Unauthorized().body("No such user"),
     }
 }
+
+#[post("/users/regenerate")]
+pub async fn regenerate(user: UserId, db: Data<Database>) -> impl Responder {
+    match db.regenerate_token(user) {
+        Ok(token) => HttpResponse::Ok().body(token),
+        Err(e) => HttpResponse::InternalServerError().body(format!("{}", e)),
+    }
+}
