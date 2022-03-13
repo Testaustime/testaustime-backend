@@ -1,0 +1,2 @@
+ALTER TABLE RegisteredUsers
+ADD COLUMN discord_id BIGINT UNSIGNED NOT NULL AFTER user_name;

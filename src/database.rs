@@ -32,17 +32,6 @@ impl Database {
         Self { pool }
     }
 
-    pub fn get_user_by_discord_id(
-        &self,
-        discord_user_id: u64,
-    ) -> Result<Option<RegisteredUser>, anyhow::Error> {
-        use crate::schema::RegisteredUsers::dsl::*;
-        Ok(RegisteredUsers
-            .filter(discord_id.eq(discord_user_id))
-            .first::<RegisteredUser>(&self.pool.get()?)
-            .optional()?)
-    }
-
     fn user_exists(&self, username: &str) -> Result<bool, anyhow::Error> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
@@ -99,7 +88,6 @@ impl Database {
         let token = crate::utils::generate_token();
         let hash = password_hash.hash.unwrap();
         let new_user = NewRegisteredUser {
-            discord_id: 0,
             auth_token: token.clone(),
             registration_time: chrono::Local::now().naive_local(),
             user_name: username.to_string(),

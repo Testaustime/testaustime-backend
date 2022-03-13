@@ -18,14 +18,10 @@ table! {
         user_name -> Text,
         password -> Binary,
         salt -> Binary,
-        discord_id -> Unsigned<Bigint>,
         registration_time -> Datetime,
     }
 }
 
 joinable!(CodingActivities -> RegisteredUsers (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    CodingActivities,
-    RegisteredUsers,
-);
+allow_tables_to_appear_in_same_query!(CodingActivities, RegisteredUsers,);

@@ -7,7 +7,6 @@ pub struct RegisteredUser {
     pub user_name: String,
     pub password: Vec<u8>,
     pub salt: Vec<u8>,
-    pub discord_id: u64,
     pub registration_time: chrono::NaiveDateTime,
 }
 
@@ -20,7 +19,6 @@ pub struct NewRegisteredUser<'a> {
     pub user_name: String,
     pub password: &'a [u8],
     pub salt: &'a [u8],
-    pub discord_id: u64,
     pub registration_time: chrono::NaiveDateTime,
 }
 
