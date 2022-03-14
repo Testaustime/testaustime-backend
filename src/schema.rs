@@ -12,10 +12,19 @@ table! {
 }
 
 table! {
+    FriendRelations (id) {
+        id -> Integer,
+        adder -> Integer,
+        friend -> Integer,
+    }
+}
+
+table! {
     RegisteredUsers (id) {
         id -> Integer,
         auth_token -> Text,
         user_name -> Text,
+        friend_code -> Nullable<Varchar>,
         password -> Binary,
         salt -> Binary,
         registration_time -> Datetime,
@@ -24,4 +33,4 @@ table! {
 
 joinable!(CodingActivities -> RegisteredUsers (user_id));
 
-allow_tables_to_appear_in_same_query!(CodingActivities, RegisteredUsers,);
+allow_tables_to_appear_in_same_query!(CodingActivities, FriendRelations, RegisteredUsers,);

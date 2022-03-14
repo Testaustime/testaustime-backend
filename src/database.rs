@@ -5,6 +5,8 @@ use diesel::{
     r2d2::{ConnectionManager, Pool},
 };
 
+use crate::utils::*;
+
 pub struct Database {
     pool: Pool<ConnectionManager<MysqlConnection>>,
 }
@@ -85,12 +87,13 @@ impl Database {
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
-        let token = crate::utils::generate_token();
+        let token = generate_token();
         let hash = password_hash.hash.unwrap();
         let new_user = NewRegisteredUser {
             auth_token: token.clone(),
             registration_time: chrono::Local::now().naive_local(),
             user_name: username.to_string(),
+            friend_code: Some(generate_friend_code()),
             password: hash.as_bytes(),
             salt: salt.as_bytes(),
         };

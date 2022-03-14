@@ -5,6 +5,7 @@ pub struct RegisteredUser {
     pub id: i32,
     pub auth_token: String,
     pub user_name: String,
+    pub friend_code: Option<String>,
     pub password: Vec<u8>,
     pub salt: Vec<u8>,
     pub registration_time: chrono::NaiveDateTime,
@@ -17,6 +18,7 @@ use crate::schema::RegisteredUsers;
 pub struct NewRegisteredUser<'a> {
     pub auth_token: String,
     pub user_name: String,
+    pub friend_code: Option<String>,
     pub password: &'a [u8],
     pub salt: &'a [u8],
     pub registration_time: chrono::NaiveDateTime,
