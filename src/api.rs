@@ -138,19 +138,24 @@ pub async fn get_activities(
     user: UserId,
     db: Data<Database>,
 ) -> Result<impl Responder> {
-    let friend_id = db.get_user_by_name(&path.0).unwrap().id;
-    match db.are_friends(user.id, friend_id) {
-        Ok(b) => {
-            if b {
-                let data = db.get_activity(data.into_inner(), user.id).unwrap();
-                Ok(web::Json(data))
-            } else {
-                Err(actix_web::error::ErrorUnauthorized(
-                    "This user is not your friend",
-                ))
+    if path.0 == "@me" {
+        let data = db.get_activity(data.into_inner(), user.id).unwrap();
+        Ok(web::Json(data))
+    } else {
+        let friend_id = db.get_user_by_name(&path.0).unwrap().id;
+        match db.are_friends(user.id, friend_id) {
+            Ok(b) => {
+                if b {
+                    let data = db.get_activity(data.into_inner(), friend_id).unwrap();
+                    Ok(web::Json(data))
+                } else {
+                    Err(actix_web::error::ErrorUnauthorized(
+                        "This user is not your friend",
+                    ))
+                }
             }
+            Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
         }
-        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
     }
 }
 
