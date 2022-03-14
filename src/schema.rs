@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 table! {
     CodingActivities (id) {
         id -> Integer,
@@ -14,8 +16,8 @@ table! {
 table! {
     FriendRelations (id) {
         id -> Integer,
-        adder -> Integer,
-        friend -> Integer,
+        lesser_id -> Integer,
+        greater_id -> Integer,
     }
 }
 

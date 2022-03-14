@@ -3,6 +3,7 @@
 mod api;
 mod database;
 pub mod models;
+mod requests;
 pub mod schema;
 mod user;
 mod utils;
@@ -54,6 +55,8 @@ async fn main() -> std::io::Result<()> {
             .service(api::register)
             .service(api::login)
             .service(api::regenerate)
+            .service(api::add_friend)
+            .service(api::get_friends)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })

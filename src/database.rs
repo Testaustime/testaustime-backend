@@ -1,5 +1,6 @@
 use chrono::Duration;
 use diesel::{
+    insert_into,
     mysql::MysqlConnection,
     prelude::*,
     r2d2::{ConnectionManager, Pool},
@@ -12,14 +13,14 @@ pub struct Database {
 }
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
 };
 use chrono::prelude::*;
 
 use crate::{
-    api::{DataRequest, HeartBeat},
     models::*,
+    requests::{DataRequest, HeartBeat},
     user::UserId,
 };
 
@@ -74,7 +75,7 @@ impl Database {
         let token = crate::utils::generate_token();
         use crate::schema::RegisteredUsers::dsl::*;
         diesel::update(crate::schema::RegisteredUsers::table)
-            .filter(id.eq(userid.0))
+            .filter(id.eq(userid.id))
             .set(auth_token.eq(&token))
             .execute(&self.pool.get()?)?;
         Ok(token)
@@ -109,7 +110,7 @@ impl Database {
             .select(id)
             .filter(auth_token.eq(token))
             .first::<i32>(&self.pool.get()?)?;
-        Ok(UserId(user))
+        Ok(UserId { id: user })
     }
 
     pub fn add_activity(
@@ -138,10 +139,10 @@ impl Database {
     pub fn get_activity(
         &self,
         request: DataRequest,
-        user: UserId,
+        user: i32,
     ) -> Result<Vec<CodingActivity>, anyhow::Error> {
         use crate::schema::CodingActivities::dsl::*;
-        let mut query = CodingActivities.into_boxed().filter(user_id.eq(user.0));
+        let mut query = CodingActivities.into_boxed().filter(user_id.eq(user));
         if let Some(from) = request.from {
             query = query.filter(start_time.ge(from.naive_local()));
         };
@@ -165,5 +166,79 @@ impl Database {
         };
         let res = query.load::<CodingActivity>(&self.pool.get()?).unwrap();
         Ok(res)
+    }
+
+    pub fn add_friend(&self, user: UserId, friend: &str) -> Result<(), anyhow::Error> {
+        use crate::schema::RegisteredUsers::dsl::*;
+        let friend_id = RegisteredUsers
+            .filter(friend_code.eq(friend))
+            .select(id)
+            .first::<i32>(&self.pool.get()?)
+            .optional()?;
+
+        if let Some(friend_id) = friend_id {
+            let (lesser, greater) = if user.id < friend_id {
+                (user.id, friend_id)
+            } else {
+                (friend_id, user.id)
+            };
+            // FIXME: Duplicates are not handled correctly, should not be an internal server error
+            insert_into(crate::schema::FriendRelations::table)
+                .values(crate::models::NewFriendRelation {
+                    lesser_id: lesser,
+                    greater_id: greater,
+                })
+                .execute(&self.pool.get()?)?;
+        }
+        Ok(())
+    }
+
+    pub fn get_friends(&self, user: UserId) -> Result<Vec<String>, anyhow::Error> {
+        use crate::schema::{
+            FriendRelations::dsl::{greater_id, lesser_id, FriendRelations},
+            RegisteredUsers::dsl::*,
+        };
+        let friends = FriendRelations
+            .filter(greater_id.eq(user.id).or(lesser_id.eq(user.id)))
+            .load::<FriendRelation>(&self.pool.get()?)?
+            .iter()
+            .map(
+                |&FriendRelation {
+                     lesser_id: other_lesser_id,
+                     greater_id: other_greater_id,
+                     ..
+                 }| {
+                    if other_lesser_id == user.id {
+                        other_greater_id
+                    } else {
+                        other_lesser_id
+                    }
+                },
+            )
+            .filter_map(|cur_friend| {
+                Some(
+                    RegisteredUsers
+                        .filter(id.eq(cur_friend))
+                        .first::<RegisteredUser>(&self.pool.get().ok()?)
+                        .ok()?
+                        .user_name,
+                )
+            })
+            .collect();
+        Ok(friends)
+    }
+
+    pub fn are_friends(&self, user: i32, friend_id: i32) -> Result<bool, anyhow::Error> {
+        use crate::schema::FriendRelations::dsl::*;
+        let (lesser, greater) = if user < friend_id {
+            (user, friend_id)
+        } else {
+            (friend_id, user)
+        };
+        Ok(FriendRelations
+            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+            .first::<FriendRelation>(&self.pool.get()?)
+            .optional()?
+            .is_some())
     }
 }

@@ -3,43 +3,13 @@ use std::{future::Future, pin::Pin};
 use actix_web::{
     dev::Payload,
     error::*,
-    web::{self, Data, Json, Query},
+    web::{self, Data, Json, Path, Query},
     Error, FromRequest, HttpRequest, HttpResponse, Responder,
 };
-use chrono::{serde::ts_seconds_option, DateTime, Duration, Local, Utc};
+use chrono::{Duration, Local};
 use dashmap::DashMap;
-use serde_derive::{Deserialize, Serialize};
 
-use crate::{database::Database, user::UserId};
-
-#[derive(Deserialize, Debug)]
-pub struct DataRequest {
-    #[serde(default)]
-    #[serde(with = "ts_seconds_option")]
-    pub from: Option<DateTime<Utc>>,
-    #[serde(default)]
-    #[serde(with = "ts_seconds_option")]
-    pub to: Option<DateTime<Utc>>,
-    pub min_duration: Option<i32>,
-    pub editor_name: Option<String>,
-    pub language: Option<String>,
-    pub hostname: Option<String>,
-    pub project_name: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct RegisterRequest {
-    username: String,
-    password: String,
-}
-
-#[derive(Deserialize, Serialize, Debug, Hash, Eq, PartialEq, Clone)]
-pub struct HeartBeat {
-    pub project_name: Option<String>,
-    pub language: Option<String>,
-    pub editor_name: Option<String>,
-    pub hostname: Option<String>,
-}
+use crate::{database::Database, requests::*, user::UserId};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -83,7 +53,7 @@ pub async fn update(
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
                     let res =
-                        match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
+                        match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
                             Ok(_) => HttpResponse::Ok().finish(),
                             Err(_) => HttpResponse::InternalServerError().finish(),
                         };
@@ -110,7 +80,7 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
-                let res = match db.add_activity(user.0, inner_heartbeat.clone(), start, duration) {
+                let res = match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
                     Ok(_) => HttpResponse::Ok().finish(),
                     Err(_) => HttpResponse::InternalServerError().finish(),
                 };
@@ -151,7 +121,7 @@ pub async fn flush(
             let (inner_heartbeat, start, duration) = flushme.to_owned();
             drop(flushme);
             heartbeats.remove(&user);
-            match db.add_activity(user.0, inner_heartbeat, start, duration) {
+            match db.add_activity(user.id, inner_heartbeat, start, duration) {
                 Ok(_) => HttpResponse::Ok().finish(),
                 Err(_) => HttpResponse::InternalServerError().finish(),
             }
@@ -161,17 +131,30 @@ pub async fn flush(
 }
 
 // TODO: Implement requests for getting the data of users other than the current user
-#[get("/activity/data")]
+#[get("/users/{username}/data")]
 pub async fn get_activities(
     data: Query<DataRequest>,
+    path: Path<(String,)>,
     user: UserId,
     db: Data<Database>,
-) -> impl Responder {
-    let data = db.get_activity(data.into_inner(), user).unwrap();
-    web::Json(data)
+) -> Result<impl Responder> {
+    let friend_id = db.get_user_by_name(&path.0).unwrap().id;
+    match db.are_friends(user.id, friend_id) {
+        Ok(b) => {
+            if b {
+                let data = db.get_activity(data.into_inner(), user.id).unwrap();
+                Ok(web::Json(data))
+            } else {
+                Err(actix_web::error::ErrorUnauthorized(
+                    "This user is not your friend",
+                ))
+            }
+        }
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
 }
 
-#[post("/users/register")]
+#[post("/auth/register")]
 pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> impl Responder {
     match db.new_user(&data.username, &data.password) {
         Ok(token) => HttpResponse::Ok().body(token),
@@ -179,7 +162,7 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> impl R
     }
 }
 
-#[post("/users/login")]
+#[post("/auth/login")]
 pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> impl Responder {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
@@ -191,10 +174,35 @@ pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> impl Resp
     }
 }
 
-#[post("/users/regenerate")]
-pub async fn regenerate(user: UserId, db: Data<Database>) -> impl Responder {
+#[post("/auth/regenerate")]
+pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder> {
     match db.regenerate_token(user) {
-        Ok(token) => HttpResponse::Ok().body(token),
-        Err(e) => HttpResponse::InternalServerError().body(format!("{}", e)),
+        Ok(token) => Ok(HttpResponse::Ok().body(token)),
+        Err(e) => {
+            error!("{}", e);
+            Err(actix_web::error::ErrorInternalServerError(e))
+        }
+    }
+}
+
+#[post("/friends/add")]
+pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Result<impl Responder> {
+    if let Err(e) = db.add_friend(user, &body.trim().trim_start_matches("ttfc_")) {
+        // This is not correct
+        error!("{}", e);
+        Err(actix_web::error::ErrorInternalServerError(e))
+    } else {
+        Ok(HttpResponse::Ok().finish())
+    }
+}
+
+#[get("/friends/list")]
+pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Responder> {
+    match db.get_friends(user) {
+        Ok(friends) => Ok(web::Json(friends)),
+        Err(e) => {
+            error!("{}", e);
+            Err(actix_web::error::ErrorInternalServerError(e))
+        }
     }
 }

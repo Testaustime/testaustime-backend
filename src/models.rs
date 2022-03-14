@@ -24,6 +24,22 @@ pub struct NewRegisteredUser<'a> {
     pub registration_time: chrono::NaiveDateTime,
 }
 
+#[derive(Queryable, Clone, Debug)]
+pub struct FriendRelation {
+    pub id: i32,
+    pub lesser_id: i32,
+    pub greater_id: i32,
+}
+
+use crate::schema::FriendRelations;
+
+#[derive(Insertable)]
+#[table_name = "FriendRelations"]
+pub struct NewFriendRelation {
+    pub lesser_id: i32,
+    pub greater_id: i32,
+}
+
 #[derive(Queryable, Clone, Debug, Serialize)]
 pub struct CodingActivity {
     #[serde(skip_serializing)]
