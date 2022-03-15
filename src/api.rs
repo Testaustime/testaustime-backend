@@ -9,7 +9,7 @@ use actix_web::{
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 
-use crate::{database::Database, requests::*, user::UserId};
+use crate::{database::Database, error::TimeError, requests::*, user::UserId};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -195,7 +195,13 @@ pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Resul
     if let Err(e) = db.add_friend(user, &body.trim().trim_start_matches("ttfc_")) {
         // This is not correct
         error!("{}", e);
-        Err(actix_web::error::ErrorInternalServerError(e))
+        Err(match e {
+            TimeError::DieselError(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                ..,
+            )) => actix_web::error::ErrorConflict(e),
+            _ => actix_web::error::ErrorInternalServerError(e),
+        })
     } else {
         Ok(HttpResponse::Ok().finish())
     }

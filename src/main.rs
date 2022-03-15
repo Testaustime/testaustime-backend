@@ -2,6 +2,7 @@
 
 mod api;
 mod database;
+mod error;
 pub mod models;
 mod requests;
 pub mod schema;

@@ -19,6 +19,7 @@ use argon2::{
 use chrono::prelude::*;
 
 use crate::{
+    error::TimeError,
     models::*,
     requests::{DataRequest, HeartBeat},
     user::UserId,
@@ -35,7 +36,7 @@ impl Database {
         Self { pool }
     }
 
-    fn user_exists(&self, username: &str) -> Result<bool, anyhow::Error> {
+    fn user_exists(&self, username: &str) -> Result<bool, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
             .filter(user_name.eq(username))
@@ -44,14 +45,14 @@ impl Database {
             .is_some())
     }
 
-    pub fn get_user_by_name(&self, username: &str) -> Result<RegisteredUser, anyhow::Error> {
+    pub fn get_user_by_name(&self, username: &str) -> Result<RegisteredUser, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
             .filter(user_name.eq(username))
             .first::<RegisteredUser>(&self.pool.get()?)?)
     }
 
-    fn get_user_hash_and_salt(&self, username: &str) -> Result<(Vec<u8>, Vec<u8>), anyhow::Error> {
+    fn get_user_hash_and_salt(&self, username: &str) -> Result<(Vec<u8>, Vec<u8>), TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
             .filter(user_name.eq(username))
@@ -59,19 +60,15 @@ impl Database {
             .first::<(Vec<u8>, Vec<u8>)>(&self.pool.get()?)?)
     }
 
-    pub fn verify_user_password(
-        &self,
-        username: &str,
-        password: &str,
-    ) -> Result<bool, anyhow::Error> {
+    pub fn verify_user_password(&self, username: &str, password: &str) -> Result<bool, TimeError> {
         let (hash, salt) = self.get_user_hash_and_salt(username)?;
         let argon2 = Argon2::default();
-        let salt = SaltString::new(std::str::from_utf8(salt.as_slice())?).unwrap();
+        let salt = SaltString::new(std::str::from_utf8(salt.as_slice()).unwrap()).unwrap();
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
         return Ok(password_hash.hash.unwrap().as_bytes() == hash);
     }
 
-    pub fn regenerate_token(&self, userid: UserId) -> Result<String, anyhow::Error> {
+    pub fn regenerate_token(&self, userid: UserId) -> Result<String, TimeError> {
         let token = crate::utils::generate_token();
         use crate::schema::RegisteredUsers::dsl::*;
         diesel::update(crate::schema::RegisteredUsers::table)
@@ -81,9 +78,9 @@ impl Database {
         Ok(token)
     }
 
-    pub fn new_user(&self, username: &str, password: &str) -> Result<String, anyhow::Error> {
+    pub fn new_user(&self, username: &str, password: &str) -> Result<String, TimeError> {
         if self.user_exists(username)? {
-            return Err(anyhow::anyhow!("User exists"));
+            return Err(TimeError::UserExistsError);
         }
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
@@ -104,7 +101,7 @@ impl Database {
         Ok(token)
     }
 
-    pub fn get_user_by_token(&self, token: &str) -> Result<UserId, anyhow::Error> {
+    pub fn get_user_by_token(&self, token: &str) -> Result<UserId, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let user = RegisteredUsers
             .select(id)
@@ -119,7 +116,7 @@ impl Database {
         heartbeat: HeartBeat,
         ctx_start_time: NaiveDateTime,
         ctx_duration: Duration,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), TimeError> {
         use crate::schema::CodingActivities::dsl::*;
         let activity = NewCodingActivity {
             user_id: updated_user_id,
@@ -140,7 +137,7 @@ impl Database {
         &self,
         request: DataRequest,
         user: i32,
-    ) -> Result<Vec<CodingActivity>, anyhow::Error> {
+    ) -> Result<Vec<CodingActivity>, TimeError> {
         use crate::schema::CodingActivities::dsl::*;
         let mut query = CodingActivities.into_boxed().filter(user_id.eq(user));
         if let Some(from) = request.from {
@@ -168,7 +165,7 @@ impl Database {
         Ok(res)
     }
 
-    pub fn add_friend(&self, user: UserId, friend: &str) -> Result<(), anyhow::Error> {
+    pub fn add_friend(&self, user: UserId, friend: &str) -> Result<(), TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let friend_id = RegisteredUsers
             .filter(friend_code.eq(friend))
@@ -193,7 +190,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_friends(&self, user: UserId) -> Result<Vec<String>, anyhow::Error> {
+    pub fn get_friends(&self, user: UserId) -> Result<Vec<String>, TimeError> {
         use crate::schema::{
             FriendRelations::dsl::{greater_id, lesser_id, FriendRelations},
             RegisteredUsers::dsl::*,
@@ -228,7 +225,7 @@ impl Database {
         Ok(friends)
     }
 
-    pub fn are_friends(&self, user: i32, friend_id: i32) -> Result<bool, anyhow::Error> {
+    pub fn are_friends(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
         use crate::schema::FriendRelations::dsl::*;
         let (lesser, greater) = if user < friend_id {
             (user, friend_id)
