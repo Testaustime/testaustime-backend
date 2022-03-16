@@ -1,4 +1,4 @@
-#![feature(let_else)]
+#![feature(let_else, once_cell)]
 
 mod api;
 mod database;
@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
     .start();
 
     let database = Data::new(database::Database::new());
-    let heartbeat_store = Data::new(api::HeartBeatMemoryStore::new());
+    let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let maxrpm = std::env::var("MAX_REQUESTS_PER_MINUTE")
         .unwrap_or("10".to_string())
         .parse::<i32>()
@@ -50,14 +50,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T"#,
             ))
-            .service(api::update)
-            .service(api::flush)
-            .service(api::get_activities)
-            .service(api::register)
-            .service(api::login)
-            .service(api::regenerate)
-            .service(api::add_friend)
-            .service(api::get_friends)
+            .service(api::activity::update)
+            .service(api::activity::flush)
+            .service(api::activity::get_activities)
+            .service(api::auth::register)
+            .service(api::auth::login)
+            .service(api::auth::regenerate)
+            .service(api::friends::add_friend)
+            .service(api::friends::get_friends)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })

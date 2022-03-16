@@ -1,3 +1,4 @@
+use actix_web::{error::ResponseError, http::StatusCode};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,4 +13,11 @@ pub enum TimeError {
     ActixError(#[from] actix_web::Error),
     #[error("User exists")]
     UserExistsError,
+}
+
+impl ResponseError for TimeError {
+    fn status_code(&self) -> StatusCode {
+        error!("{}", self);
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
 }

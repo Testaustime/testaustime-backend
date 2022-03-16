@@ -1,3 +1,5 @@
+#![feature(once_cell)]
+
 use std::{
     collections::HashMap,
     future::{ready, Ready},
@@ -17,13 +19,20 @@ pub struct RateLimiterStorage {
     pub maxrpm: i32,
 }
 
+pub struct RateLimiter {
+    pub storage: Addr<RateLimiterStorage>,
+}
+
+pub struct RateLimiterTransform<S> {
+    pub service: S,
+    pub ratelimiter: Addr<RateLimiterStorage>,
+}
+
 struct Request {
     pub ip: String,
 }
 
-impl Message for Request {
-    type Result = Result<bool, std::io::Error>;
-}
+struct LimitRequest;
 
 impl Actor for RateLimiterStorage {
     type Context = Context<Self>;
@@ -38,8 +47,20 @@ impl RateLimiterStorage {
     }
 }
 
-pub struct RateLimiter {
-    pub storage: Addr<RateLimiterStorage>,
+impl Message for LimitRequest {
+    type Result = i32;
+}
+
+impl Handler<LimitRequest> for RateLimiterStorage {
+    type Result = i32;
+
+    fn handle(&mut self, _: LimitRequest, _: &mut Context<Self>) -> Self::Result {
+        self.maxrpm
+    }
+}
+
+impl Message for Request {
+    type Result = Result<bool, std::io::Error>;
 }
 
 impl Handler<Request> for RateLimiterStorage {
@@ -59,11 +80,6 @@ impl Handler<Request> for RateLimiterStorage {
         }
         Ok(true)
     }
-}
-
-pub struct RateLimiterTransform<S> {
-    pub service: S,
-    pub ratelimiter: Addr<RateLimiterStorage>,
 }
 
 impl<S, B> Transform<S, ServiceRequest> for RateLimiter
@@ -104,6 +120,7 @@ where
             ip: conn_info.realip_remote_addr().unwrap().to_string(),
         });
         let resp = self.service.call(req);
+        let maxrpm_fut = self.ratelimiter.send(LimitRequest);
         Box::pin(async move {
             let res = res.await.unwrap().unwrap();
             if res {
@@ -112,10 +129,9 @@ where
                 Ok(resp)
             } else {
                 // UNCOOL PERSON
-                // TODO: Lazy static impl of MAX_REQUESTS_PER_MINUTE
                 Err(actix_web::error::ErrorTooManyRequests(format!(
-                    "You have sent more than {} requests during the last minute. SLOW DOWN!",
-                    std::env::var("MAX_REQUESTS_PER_MINUTE").unwrap_or("10".to_string())
+                    "You have sent more than `{}` requests this minute. SLOW DOWN!",
+                    maxrpm_fut.await.unwrap()
                 )))
             }
         })
