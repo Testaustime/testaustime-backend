@@ -120,18 +120,21 @@ pub async fn get_activities(
     } else {
         let db_clone = db.clone();
         let friend_id = db_clone.get_user_by_name(&path.0)?.id;
-        match db.are_friends(user.id, friend_id) {
-            Ok(b) => {
-                if b {
-                    let data =
-                        block(move || db.get_activity(data.into_inner(), friend_id).unwrap())
-                            .await?;
-                    Ok(web::Json(data))
-                } else {
-                    Err(ErrorUnauthorized("This user is not your friend"))
+        if friend_id == user.id {
+            let data = db.get_activity(data.into_inner(), friend_id)?;
+            Ok(web::Json(data))
+        } else {
+            match db.are_friends(user.id, friend_id) {
+                Ok(b) => {
+                    if b {
+                        let data = db.get_activity(data.into_inner(), friend_id)?;
+                        Ok(web::Json(data))
+                    } else {
+                        Err(ErrorUnauthorized("This user is not your friend"))
+                    }
                 }
+                Err(e) => Err(ErrorInternalServerError(e)),
             }
-            Err(e) => Err(ErrorInternalServerError(e)),
         }
     }
 }
