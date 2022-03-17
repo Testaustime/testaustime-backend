@@ -1,12 +1,15 @@
 use serde::Serialize;
 
-#[derive(Queryable, Clone, Debug)]
+#[derive(Queryable, Clone, Debug, Serialize)]
 pub struct RegisteredUser {
     pub id: i32,
+    #[serde(skip_serializing)]
     pub auth_token: String,
     pub user_name: String,
     pub friend_code: Option<String>,
+    #[serde(skip_serializing)]
     pub password: Vec<u8>,
+    #[serde(skip_serializing)]
     pub salt: Vec<u8>,
     pub registration_time: chrono::NaiveDateTime,
 }

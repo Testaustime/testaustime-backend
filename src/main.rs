@@ -58,6 +58,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::auth::regenerate)
             .service(api::friends::add_friend)
             .service(api::friends::get_friends)
+            .service(api::users::my_profile)
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })

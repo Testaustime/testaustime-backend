@@ -52,6 +52,13 @@ impl Database {
             .first::<RegisteredUser>(&self.pool.get()?)?)
     }
 
+    pub fn get_user_by_id(&self, userid: UserId) -> Result<RegisteredUser, TimeError> {
+        use crate::schema::RegisteredUsers::dsl::*;
+        Ok(RegisteredUsers
+            .filter(id.eq(userid.id))
+            .first::<RegisteredUser>(&self.pool.get()?)?)
+    }
+
     fn get_user_hash_and_salt(&self, username: &str) -> Result<(Vec<u8>, Vec<u8>), TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
