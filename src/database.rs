@@ -251,4 +251,14 @@ impl Database {
             .optional()?
             .is_some())
     }
+
+    pub fn regenerate_friend_code(&self, userid: UserId) -> Result<String, TimeError> {
+        let code = crate::utils::generate_friend_code();
+        use crate::schema::RegisteredUsers::dsl::*;
+        diesel::update(crate::schema::RegisteredUsers::table)
+            .filter(id.eq(userid.id))
+            .set(auth_token.eq(&code))
+            .execute(&self.pool.get()?)?;
+        Ok(code)
+    }
 }

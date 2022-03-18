@@ -34,3 +34,14 @@ pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Respon
         }
     }
 }
+
+#[post("/friends/regenerate")]
+pub async fn regenerate_friend_code(user: UserId, db: Data<Database>) -> Result<impl Responder> {
+    match db.regenerate_friend_code(user) {
+        Ok(code) => Ok(HttpResponse::Ok().body(code)),
+        Err(e) => {
+            error!("{}", e);
+            Err(ErrorInternalServerError(e))
+        }
+    }
+}
