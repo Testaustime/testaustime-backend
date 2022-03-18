@@ -281,7 +281,7 @@ impl Database {
         use crate::schema::RegisteredUsers::dsl::*;
         diesel::update(crate::schema::RegisteredUsers::table)
             .filter(id.eq(userid.id))
-            .set(auth_token.eq(&code))
+            .set(friend_code.eq(&code))
             .execute(&self.pool.get()?)?;
         Ok(code)
     }
