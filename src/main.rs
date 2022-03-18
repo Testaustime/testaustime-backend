@@ -12,6 +12,7 @@ mod utils;
 use std::collections::HashMap;
 
 use actix::prelude::*;
+use actix_cors::Cors;
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
 use testausratelimiter::*;
 
@@ -43,7 +44,14 @@ async fn main() -> std::io::Result<()> {
         .expect("Invalid request");
     let ratelimiter = RateLimiterStorage::new(maxrpm).start();
     HttpServer::new(move || {
+        let cors = Cors::default()
+            .allowed_origin("http://localhost:3000")
+            .allowed_methods(vec!["GET", "POST"])
+            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+            .allowed_header(http::header::CONTENT_TYPE)
+            .max_age(3600);
         App::new()
+            .wrap(cors)
             .wrap(RateLimiter {
                 storage: ratelimiter.clone(),
             })
