@@ -54,8 +54,48 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 
 #[post("/auth/register")]
 pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
+    if data.password.len() < 8 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "Password has to be at least 8 characters long",
+        ));
+    }
     match db.new_user(&data.username, &data.password) {
         Ok(token) => Ok(HttpResponse::Ok().body(token)),
         Err(e) => Err(ErrorInternalServerError(e)),
+    }
+}
+
+#[post("/auth/changepassword")]
+pub async fn changepassword(
+    userid: UserId,
+    data: Json<PasswordChangeRequest>,
+    db: Data<Database>,
+) -> Result<impl Responder> {
+    if data.new.len() < 8 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "Password has to be at least 8 characters long",
+        ));
+    }
+    match db.get_user_by_id(userid.clone()) {
+        Ok(user) => {
+            match db.verify_user_password(&user.user_name, &data.old) {
+                Ok(k) => {
+                    if k || user.password.iter().all(|n| *n == 0) {
+                        // Some noobs don't have password (me)
+                        match db.change_user_password_to(userid, &data.new) {
+                            Ok(_) => Ok(HttpResponse::Ok().body("Password changed succesfully!")),
+                            Err(e) => Err(ErrorInternalServerError(e)),
+                        }
+                    } else {
+                        Ok(HttpResponse::Unauthorized().body("Invalid password or username"))
+                    }
+                }
+                Err(e) => Err(ErrorInternalServerError(e)),
+            }
+        }
+        Err(e) => {
+            error!("{}", e);
+            Err(ErrorInternalServerError(e))
+        }
     }
 }

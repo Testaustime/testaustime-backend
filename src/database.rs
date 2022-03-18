@@ -70,7 +70,9 @@ impl Database {
     pub fn verify_user_password(&self, username: &str, password: &str) -> Result<bool, TimeError> {
         let (hash, salt) = self.get_user_hash_and_salt(username)?;
         let argon2 = Argon2::default();
-        let salt = SaltString::new(std::str::from_utf8(salt.as_slice()).unwrap()).unwrap();
+        let Ok(salt) = SaltString::new(&String::from_utf8(salt).unwrap()) else {
+            return Ok(false); // The user has no password
+        };
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
         return Ok(password_hash.hash.unwrap().as_bytes() == hash);
     }
@@ -106,6 +108,28 @@ impl Database {
             .values(&new_user)
             .execute(&self.pool.get()?)?;
         Ok(token)
+    }
+
+    pub fn change_user_password_to(
+        &self,
+        user: UserId,
+        new_password: &str,
+    ) -> Result<(), TimeError> {
+        let new_salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(new_password.as_bytes(), &new_salt)
+            .unwrap();
+        let new_hash = password_hash.hash.unwrap();
+        use crate::schema::RegisteredUsers::dsl::*;
+        diesel::update(crate::schema::RegisteredUsers::table)
+            .filter(id.eq(user.id))
+            .set((
+                password.eq(&new_hash.as_bytes()),
+                salt.eq(new_salt.as_bytes()),
+            ))
+            .execute(&self.pool.get()?)?;
+        Ok(())
     }
 
     pub fn get_user_by_token(&self, token: &str) -> Result<UserId, TimeError> {
