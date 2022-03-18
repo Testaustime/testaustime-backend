@@ -1,6 +1,6 @@
 use actix_web::{
     error::*,
-    web::{self, block, Data, Json, Path, Query},
+    web::{Data, Json},
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
@@ -11,7 +11,7 @@ use crate::{database::Database, requests::*, user::UserId};
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
-#[post("/activity/update")]
+#[post("/update")]
 pub async fn update(
     user: UserId,
     heartbeat: Json<HeartBeat>,
@@ -87,7 +87,7 @@ pub async fn update(
     }
 }
 
-#[post("/activity/flush")]
+#[post("/flush")]
 pub async fn flush(
     user: UserId,
     db: Data<Database>,
@@ -104,37 +104,5 @@ pub async fn flush(
             }
         }
         None => Ok(HttpResponse::Ok().finish()),
-    }
-}
-
-#[get("/users/{username}/activity/data")]
-pub async fn get_activities(
-    data: Query<DataRequest>,
-    path: Path<(String,)>,
-    user: UserId,
-    db: Data<Database>,
-) -> Result<impl Responder> {
-    if path.0 == "@me" {
-        let data = block(move || db.get_activity(data.into_inner(), user.id).unwrap()).await?;
-        Ok(web::Json(data))
-    } else {
-        let db_clone = db.clone();
-        let friend_id = db_clone.get_user_by_name(&path.0)?.id;
-        if friend_id == user.id {
-            let data = db.get_activity(data.into_inner(), friend_id)?;
-            Ok(web::Json(data))
-        } else {
-            match db.are_friends(user.id, friend_id) {
-                Ok(b) => {
-                    if b {
-                        let data = db.get_activity(data.into_inner(), friend_id)?;
-                        Ok(web::Json(data))
-                    } else {
-                        Err(ErrorUnauthorized("This user is not your friend"))
-                    }
-                }
-                Err(e) => Err(ErrorInternalServerError(e)),
-            }
-        }
     }
 }

@@ -21,11 +21,13 @@ pub struct RateLimiterStorage {
 
 pub struct RateLimiter {
     pub storage: Addr<RateLimiterStorage>,
+    pub use_peer_addr: bool,
 }
 
 pub struct RateLimiterTransform<S> {
     pub service: S,
     pub ratelimiter: Addr<RateLimiterStorage>,
+    pub use_peer_addr: bool,
 }
 
 struct Request {
@@ -98,6 +100,7 @@ where
         ready(Ok(RateLimiterTransform {
             service,
             ratelimiter: self.storage.clone(),
+            use_peer_addr: self.use_peer_addr,
         }))
     }
 }
@@ -117,7 +120,11 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let conn_info = req.connection_info().clone();
         let res = self.ratelimiter.send(Request {
-            ip: conn_info.realip_remote_addr().unwrap().to_string(),
+            ip: if self.use_peer_addr {
+                conn_info.peer_addr().unwrap().to_string()
+            } else {
+                conn_info.realip_remote_addr().unwrap().to_string()
+            },
         });
         let resp = self.service.call(req);
         let maxrpm_fut = self.ratelimiter.send(LimitRequest);
