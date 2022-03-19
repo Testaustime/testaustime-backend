@@ -1,5 +1,6 @@
 address="localhost:8000"
 allowed_origin="http://localhost:3000"
+database_url="mysql://root:root@localhost/testaustime"
 ratelimit_by_peer_ip=true
 max_requests_per_min=30
 max_heartbeats_per_min=8

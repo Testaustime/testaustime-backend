@@ -30,6 +30,7 @@ pub struct TimeConfig {
     pub max_requests_per_min: Option<i32>,
     pub max_heartbeats_per_min: Option<i32>,
     pub address: String,
+    pub database_url: String,
     pub allowed_origin: String,
 }
 
@@ -42,7 +43,7 @@ async fn main() -> std::io::Result<()> {
         toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
             .expect("Invalid Toml in settings.toml");
 
-    let database = Data::new(database::Database::new());
+    let database = Data::new(database::Database::new(&config.database_url));
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(8)).start();
     let heartbeat_ratelimiter =

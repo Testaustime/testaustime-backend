@@ -26,10 +26,8 @@ use crate::{
 };
 
 impl Database {
-    pub fn new() -> Self {
-        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-        let manager = ConnectionManager::<MysqlConnection>::new(&database_url);
+    pub fn new(database_url: &str) -> Self {
+        let manager = ConnectionManager::<MysqlConnection>::new(database_url);
         let pool = Pool::builder()
             .build(manager)
             .expect("Failed to create connection pool");
