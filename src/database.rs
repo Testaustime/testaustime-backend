@@ -277,8 +277,8 @@ impl Database {
     }
 
     pub fn regenerate_friend_code(&self, userid: UserId) -> Result<String, TimeError> {
-        let code = crate::utils::generate_friend_code();
         use crate::schema::RegisteredUsers::dsl::*;
+        let code = crate::utils::generate_friend_code();
         diesel::update(crate::schema::RegisteredUsers::table)
             .filter(id.eq(userid.id))
             .set(friend_code.eq(&code))
