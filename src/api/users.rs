@@ -8,7 +8,7 @@ use crate::{database::Database, requests::DataRequest, user::UserId};
 
 #[get("/users/@me")]
 pub async fn my_profile(user: UserId, db: Data<Database>) -> Result<impl Responder> {
-    match db.get_user_by_id(user) {
+    match db.get_user_by_id(user.id) {
         Ok(user) => Ok(web::Json(user)),
         Err(e) => {
             error!("{}", e);

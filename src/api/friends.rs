@@ -9,7 +9,7 @@ use crate::{database::Database, error::TimeError, user::UserId};
 
 #[post("/friends/add")]
 pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Result<impl Responder> {
-    if let Err(e) = db.add_friend(user, &body.trim().trim_start_matches("ttfc_")) {
+    if let Err(e) = db.add_friend(user.id, &body.trim().trim_start_matches("ttfc_")) {
         // This is not correct
         error!("{}", e);
         Err(match e {
@@ -26,7 +26,7 @@ pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Resul
 
 #[get("/friends/list")]
 pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Responder> {
-    match db.get_friends(user) {
+    match db.get_friends(user.id) {
         Ok(friends) => Ok(web::Json(friends)),
         Err(e) => {
             error!("{}", e);
@@ -37,7 +37,7 @@ pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Respon
 
 #[post("/friends/regenerate")]
 pub async fn regenerate_friend_code(user: UserId, db: Data<Database>) -> Result<impl Responder> {
-    match db.regenerate_friend_code(user) {
+    match db.regenerate_friend_code(user.id) {
         Ok(code) => Ok(HttpResponse::Ok().body(String::from("ttfc_") + &code)),
         Err(e) => {
             error!("{}", e);

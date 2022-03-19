@@ -21,7 +21,7 @@ impl FromRequest for UserId {
             let Some(auth) = headers.get("Authorization") else { return Err(ErrorUnauthorized("Unauthorized")) };
             let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
             if let Ok(user) = db.get_user_by_token(token) {
-                Ok(user)
+                Ok(UserId { id: user })
             } else {
                 Err(ErrorUnauthorized("Unauthorized"))
             }
@@ -43,7 +43,7 @@ pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<im
 
 #[post("/auth/regenerate")]
 pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder> {
-    match db.regenerate_token(user) {
+    match db.regenerate_token(user.id) {
         Ok(token) => Ok(HttpResponse::Ok().body(token)),
         Err(e) => {
             error!("{}", e);
@@ -76,13 +76,13 @@ pub async fn changepassword(
             "Password has to be at least 8 characters long",
         ));
     }
-    match db.get_user_by_id(userid.clone()) {
+    match db.get_user_by_id(userid.id) {
         Ok(user) => {
             match db.verify_user_password(&user.user_name, &data.old) {
                 Ok(k) => {
                     if k || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)
-                        match db.change_user_password_to(userid, &data.new) {
+                        match db.change_user_password_to(userid.id, &data.new) {
                             Ok(_) => Ok(HttpResponse::Ok().body("Password changed succesfully!")),
                             Err(e) => Err(ErrorInternalServerError(e)),
                         }

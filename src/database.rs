@@ -22,7 +22,6 @@ use crate::{
     error::TimeError,
     models::*,
     requests::{DataRequest, HeartBeat},
-    user::UserId,
 };
 
 impl Database {
@@ -50,10 +49,10 @@ impl Database {
             .first::<RegisteredUser>(&self.pool.get()?)?)
     }
 
-    pub fn get_user_by_id(&self, userid: UserId) -> Result<RegisteredUser, TimeError> {
+    pub fn get_user_by_id(&self, userid: i32) -> Result<RegisteredUser, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         Ok(RegisteredUsers
-            .filter(id.eq(userid.id))
+            .filter(id.eq(userid))
             .first::<RegisteredUser>(&self.pool.get()?)?)
     }
 
@@ -75,11 +74,11 @@ impl Database {
         return Ok(password_hash.hash.unwrap().as_bytes() == hash);
     }
 
-    pub fn regenerate_token(&self, userid: UserId) -> Result<String, TimeError> {
+    pub fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {
         let token = crate::utils::generate_token();
         use crate::schema::RegisteredUsers::dsl::*;
         diesel::update(crate::schema::RegisteredUsers::table)
-            .filter(id.eq(userid.id))
+            .filter(id.eq(userid))
             .set(auth_token.eq(&token))
             .execute(&self.pool.get()?)?;
         Ok(token)
@@ -108,11 +107,7 @@ impl Database {
         Ok(token)
     }
 
-    pub fn change_user_password_to(
-        &self,
-        user: UserId,
-        new_password: &str,
-    ) -> Result<(), TimeError> {
+    pub fn change_user_password_to(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
         let new_salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
         let password_hash = argon2
@@ -121,7 +116,7 @@ impl Database {
         let new_hash = password_hash.hash.unwrap();
         use crate::schema::RegisteredUsers::dsl::*;
         diesel::update(crate::schema::RegisteredUsers::table)
-            .filter(id.eq(user.id))
+            .filter(id.eq(user))
             .set((
                 password.eq(&new_hash.as_bytes()),
                 salt.eq(new_salt.as_bytes()),
@@ -130,13 +125,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_user_by_token(&self, token: &str) -> Result<UserId, TimeError> {
+    pub fn get_user_by_token(&self, token: &str) -> Result<i32, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let user = RegisteredUsers
             .select(id)
             .filter(auth_token.eq(token))
             .first::<i32>(&self.pool.get()?)?;
-        Ok(UserId { id: user })
+        Ok(user)
     }
 
     pub fn add_activity(
@@ -200,7 +195,7 @@ impl Database {
         Ok(res)
     }
 
-    pub fn add_friend(&self, user: UserId, friend: &str) -> Result<(), TimeError> {
+    pub fn add_friend(&self, user: i32, friend: &str) -> Result<(), TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let friend_id = RegisteredUsers
             .filter(friend_code.eq(friend))
@@ -209,10 +204,10 @@ impl Database {
             .optional()?;
 
         if let Some(friend_id) = friend_id {
-            let (lesser, greater) = if user.id < friend_id {
-                (user.id, friend_id)
+            let (lesser, greater) = if user < friend_id {
+                (user, friend_id)
             } else {
-                (friend_id, user.id)
+                (friend_id, user)
             };
             // FIXME: Duplicates are not handled correctly, should not be an internal server error
             insert_into(crate::schema::FriendRelations::table)
@@ -225,13 +220,13 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_friends(&self, user: UserId) -> Result<Vec<String>, TimeError> {
+    pub fn get_friends(&self, user: i32) -> Result<Vec<String>, TimeError> {
         use crate::schema::{
             FriendRelations::dsl::{greater_id, lesser_id, FriendRelations},
             RegisteredUsers::dsl::*,
         };
         let friends = FriendRelations
-            .filter(greater_id.eq(user.id).or(lesser_id.eq(user.id)))
+            .filter(greater_id.eq(user).or(lesser_id.eq(user)))
             .load::<FriendRelation>(&self.pool.get()?)?
             .iter()
             .map(
@@ -240,7 +235,7 @@ impl Database {
                      greater_id: other_greater_id,
                      ..
                  }| {
-                    if other_lesser_id == user.id {
+                    if other_lesser_id == user {
                         other_greater_id
                     } else {
                         other_lesser_id
@@ -287,11 +282,11 @@ impl Database {
             != 0)
     }
 
-    pub fn regenerate_friend_code(&self, userid: UserId) -> Result<String, TimeError> {
+    pub fn regenerate_friend_code(&self, userid: i32) -> Result<String, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let code = crate::utils::generate_friend_code();
         diesel::update(crate::schema::RegisteredUsers::table)
-            .filter(id.eq(userid.id))
+            .filter(id.eq(userid))
             .set(friend_code.eq(&code))
             .execute(&self.pool.get()?)?;
         Ok(code)
