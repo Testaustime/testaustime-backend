@@ -106,3 +106,13 @@ pub async fn flush(
         None => Ok(HttpResponse::Ok().finish()),
     }
 }
+
+#[delete("/activity/delete")]
+pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder> {
+    let deleted = db.delete_activity(user.id, body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?)?;
+    if deleted {
+        Ok(HttpResponse::Ok().finish())
+    } else {
+        Err(ErrorBadRequest("Invalid id or Unauthorized"))
+    }
+}

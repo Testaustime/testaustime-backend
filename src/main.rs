@@ -73,6 +73,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::activity::update)
                     .service(api::activity::flush),
             )
+            .service(api::activity::delete)
             .service(api::auth::register)
             .service(api::auth::login)
             .service(api::auth::regenerate)

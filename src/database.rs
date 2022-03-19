@@ -283,4 +283,13 @@ impl Database {
             .execute(&self.pool.get()?)?;
         Ok(code)
     }
+
+    pub fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
+        use crate::schema::CodingActivities::dsl::*;
+        let res = diesel::delete(crate::schema::CodingActivities::table)
+            .filter(id.eq(activity))
+            .filter(user_id.eq(userid))
+            .execute(&self.pool.get()?)?;
+        Ok(res != 0)
+    }
 }
