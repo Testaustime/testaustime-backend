@@ -24,6 +24,9 @@ extern crate log;
 #[macro_use]
 extern crate diesel;
 
+#[macro_use]
+extern crate serde_json;
+
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
     pub ratelimit_by_peer_ip: Option<bool>,

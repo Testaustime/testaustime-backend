@@ -33,7 +33,10 @@ impl FromRequest for UserId {
 pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
-            Ok(true) => Ok(HttpResponse::Ok().body(user.auth_token)),
+            Ok(true) => {
+                let token = json!({ "token": user.auth_token }).to_string();
+                Ok(HttpResponse::Ok().body(token))
+            }
             Ok(false) => Ok(HttpResponse::Unauthorized().body("Invalid password or username")),
             Err(e) => Err(ErrorInternalServerError(e)),
         },
@@ -44,7 +47,10 @@ pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<im
 #[post("/auth/regenerate")]
 pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder> {
     match db.regenerate_token(user.id) {
-        Ok(token) => Ok(HttpResponse::Ok().body(token)),
+        Ok(token) => {
+            let token = json!({ "token": token }).to_string();
+            Ok(HttpResponse::Ok().body(token))
+        }
         Err(e) => {
             error!("{}", e);
             Err(ErrorInternalServerError(e))
@@ -60,7 +66,10 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
         ));
     }
     match db.new_user(&data.username, &data.password) {
-        Ok(token) => Ok(HttpResponse::Ok().body(token)),
+        Ok(token) => {
+            let token = json!({ "token": token }).to_string();
+            Ok(HttpResponse::Ok().body(token))
+        }
         Err(e) => Err(ErrorInternalServerError(e)),
     }
 }
@@ -83,11 +92,11 @@ pub async fn changepassword(
                     if k || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)
                         match db.change_user_password_to(userid.id, &data.new) {
-                            Ok(_) => Ok(HttpResponse::Ok().body("Password changed succesfully!")),
+                            Ok(_) => Ok(HttpResponse::Ok().finish()),
                             Err(e) => Err(ErrorInternalServerError(e)),
                         }
                     } else {
-                        Ok(HttpResponse::Unauthorized().body("Invalid password or username"))
+                        Err(ErrorUnauthorized("Invalid password or username").body())
                     }
                 }
                 Err(e) => Err(ErrorInternalServerError(e)),

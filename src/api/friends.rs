@@ -21,7 +21,7 @@ pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Resul
                 _ => ErrorInternalServerError(e),
             })
         }
-        Ok(name) => Ok(HttpResponse::Ok().body(name)),
+        Ok(name) => Ok(HttpResponse::Ok().body(json!({ "name": name }).to_string())),
     }
 }
 
@@ -39,7 +39,10 @@ pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Respon
 #[post("/friends/regenerate")]
 pub async fn regenerate_friend_code(user: UserId, db: Data<Database>) -> Result<impl Responder> {
     match db.regenerate_friend_code(user.id) {
-        Ok(code) => Ok(HttpResponse::Ok().body(String::from("ttfc_") + &code)),
+        Ok(code) => {
+            let token = String::from("ttfc_").push_str(&code);
+            Ok(HttpResponse::Ok().body(json!({ "token": token }).to_string()))
+        }
         Err(e) => {
             error!("{}", e);
             Err(ErrorInternalServerError(e))
@@ -50,10 +53,7 @@ pub async fn regenerate_friend_code(user: UserId, db: Data<Database>) -> Result<
 #[delete("/friends/remove")]
 pub async fn remove(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder> {
     let friend = db.get_user_by_name(&body)?;
-    let deleted = db.remove_friend(
-        user.id,
-        friend.id,
-    )?;
+    let deleted = db.remove_friend(user.id, friend.id)?;
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {
