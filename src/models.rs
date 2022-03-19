@@ -45,7 +45,6 @@ pub struct NewFriendRelation {
 
 #[derive(Queryable, Clone, Debug, Serialize)]
 pub struct CodingActivity {
-    #[serde(skip_serializing)]
     pub id: i32,
     #[serde(skip_serializing)]
     pub user_id: i32,
