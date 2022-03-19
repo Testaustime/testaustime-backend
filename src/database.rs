@@ -205,6 +205,10 @@ impl Database {
                 return Err(TimeError::UserNotFound)
             };
 
+        if friend_id == user {
+            return Err(TimeError::CurrentUser);
+        }
+
         let (lesser, greater) = if user < friend_id {
             (user, friend_id)
         } else {

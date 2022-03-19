@@ -15,6 +15,8 @@ pub enum TimeError {
     UserExistsError,
     #[error("User not found")]
     UserNotFound,
+    #[error("You cannot add yourself")]
+    CurrentUser,
 }
 
 impl ResponseError for TimeError {
