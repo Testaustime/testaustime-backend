@@ -9,18 +9,19 @@ use crate::{database::Database, error::TimeError, user::UserId};
 
 #[post("/friends/add")]
 pub async fn add_friend(user: UserId, body: String, db: Data<Database>) -> Result<impl Responder> {
-    if let Err(e) = db.add_friend(user.id, &body.trim().trim_start_matches("ttfc_")) {
+    match db.add_friend(user.id, &body.trim().trim_start_matches("ttfc_")) {
         // This is not correct
-        error!("{}", e);
-        Err(match e {
-            TimeError::DieselError(diesel::result::Error::DatabaseError(
-                DatabaseErrorKind::UniqueViolation,
-                ..,
-            )) => ErrorConflict(e),
-            _ => ErrorInternalServerError(e),
-        })
-    } else {
-        Ok(HttpResponse::Ok().finish())
+        Err(e) => {
+            error!("{}", e);
+            Err(match e {
+                TimeError::DieselError(diesel::result::Error::DatabaseError(
+                    DatabaseErrorKind::UniqueViolation,
+                    ..,
+                )) => ErrorConflict(e),
+                _ => ErrorInternalServerError(e),
+            })
+        }
+        Ok(name) => Ok(HttpResponse::Ok().body(name)),
     }
 }
 

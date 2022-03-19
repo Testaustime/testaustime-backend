@@ -13,6 +13,8 @@ pub enum TimeError {
     ActixError(#[from] actix_web::Error),
     #[error("User exists")]
     UserExistsError,
+    #[error("User not found")]
+    UserNotFound,
 }
 
 impl ResponseError for TimeError {

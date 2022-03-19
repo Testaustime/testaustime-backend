@@ -195,29 +195,29 @@ impl Database {
         Ok(res)
     }
 
-    pub fn add_friend(&self, user: i32, friend: &str) -> Result<(), TimeError> {
+    pub fn add_friend(&self, user: i32, friend: &str) -> Result<String, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
-        let friend_id = RegisteredUsers
+        let Some((friend_id, friend_name)) = RegisteredUsers
             .filter(friend_code.eq(friend))
-            .select(id)
-            .first::<i32>(&self.pool.get()?)
-            .optional()?;
-
-        if let Some(friend_id) = friend_id {
-            let (lesser, greater) = if user < friend_id {
-                (user, friend_id)
-            } else {
-                (friend_id, user)
+            .select((id,user_name))
+            .first::<(i32,String)>(&self.pool.get()?)
+            .optional()? else {
+                return Err(TimeError::UserNotFound)
             };
-            // FIXME: Duplicates are not handled correctly, should not be an internal server error
-            insert_into(crate::schema::FriendRelations::table)
-                .values(crate::models::NewFriendRelation {
-                    lesser_id: lesser,
-                    greater_id: greater,
-                })
-                .execute(&self.pool.get()?)?;
-        }
-        Ok(())
+
+        let (lesser, greater) = if user < friend_id {
+            (user, friend_id)
+        } else {
+            (friend_id, user)
+        };
+
+        insert_into(crate::schema::FriendRelations::table)
+            .values(crate::models::NewFriendRelation {
+                lesser_id: lesser,
+                greater_id: greater,
+            })
+            .execute(&self.pool.get()?)?;
+        Ok(friend_name)
     }
 
     pub fn get_friends(&self, user: i32) -> Result<Vec<String>, TimeError> {
