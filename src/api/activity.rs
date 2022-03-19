@@ -109,7 +109,10 @@ pub async fn flush(
 
 #[delete("/activity/delete")]
 pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder> {
-    let deleted = db.delete_activity(user.id, body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?)?;
+    let deleted = db.delete_activity(
+        user.id,
+        body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?,
+    )?;
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {
