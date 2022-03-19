@@ -31,7 +31,7 @@ pub async fn update(
                     // end session and start new
                     let res =
                         match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
-                            Ok(_) => Ok(HttpResponse::Ok().finish()),
+                            Ok(_) => Ok(HttpResponse::Ok().body(0.to_string())),
                             Err(e) => Err(ErrorInternalServerError(e)),
                         };
                     heartbeats.insert(
@@ -53,12 +53,12 @@ pub async fn update(
                             curtime.signed_duration_since(start),
                         ),
                     );
-                    Ok(HttpResponse::Ok().finish())
+                    Ok(HttpResponse::Ok().body(curtime.signed_duration_since(start).to_string()))
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
                 let res = match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
-                    Ok(_) => Ok(HttpResponse::Ok().finish()),
+                    Ok(_) => Ok(HttpResponse::Ok().body(0.to_string())),
                     Err(e) => Err(ErrorInternalServerError(e)),
                 };
                 heartbeats.insert(
@@ -82,7 +82,7 @@ pub async fn update(
                     Duration::seconds(0),
                 ),
             );
-            Ok(HttpResponse::Ok().finish())
+            Ok(HttpResponse::Ok().body(0.to_string()))
         }
     }
 }
