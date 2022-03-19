@@ -96,7 +96,7 @@ pub async fn changepassword(
                             Err(e) => Err(ErrorInternalServerError(e)),
                         }
                     } else {
-                        Err(ErrorUnauthorized("Invalid password or username").body())
+                        Err(ErrorUnauthorized("Invalid password or username"))
                     }
                 }
                 Err(e) => Err(ErrorInternalServerError(e)),
