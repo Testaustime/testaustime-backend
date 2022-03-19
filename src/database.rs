@@ -274,6 +274,19 @@ impl Database {
             .is_some())
     }
 
+    pub fn remove_friend(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
+        use crate::schema::FriendRelations::dsl::*;
+        let (lesser, greater) = if user < friend_id {
+            (user, friend_id)
+        } else {
+            (friend_id, user)
+        };
+        Ok(diesel::delete(FriendRelations)
+            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+            .execute(&self.pool.get()?)?
+            != 0)
+    }
+
     pub fn regenerate_friend_code(&self, userid: UserId) -> Result<String, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let code = crate::utils::generate_friend_code();
