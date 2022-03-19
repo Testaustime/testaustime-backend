@@ -49,9 +49,10 @@ pub async fn regenerate_friend_code(user: UserId, db: Data<Database>) -> Result<
 
 #[delete("/friends/remove")]
 pub async fn remove(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder> {
+    let friend = db.get_user_by_name(&body)?;
     let deleted = db.remove_friend(
         user.id,
-        body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?,
+        friend.id,
     )?;
     if deleted {
         Ok(HttpResponse::Ok().finish())
