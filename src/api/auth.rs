@@ -7,7 +7,7 @@ use actix_web::{
     Error, FromRequest, HttpRequest, HttpResponse, Responder,
 };
 
-use crate::{database::Database, requests::*, user::UserId};
+use crate::{database::Database, requests::*, user::UserId, models::RegisteredUser};
 
 impl FromRequest for UserId {
     type Error = Error;
@@ -21,7 +21,27 @@ impl FromRequest for UserId {
             let Some(auth) = headers.get("Authorization") else { return Err(ErrorUnauthorized("Unauthorized")) };
             let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
             if let Ok(user) = db.get_user_by_token(token) {
-                Ok(UserId { id: user })
+                Ok(UserId { id: user.id })
+            } else {
+                Err(ErrorUnauthorized("Unauthorized"))
+            }
+        })
+    }
+}
+
+impl FromRequest for RegisteredUser {
+    type Error = Error;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let db = Data::extract(req);
+        let headers = req.headers().clone();
+        Box::pin(async move {
+            let db: Data<Database> = db.await?;
+            let Some(auth) = headers.get("Authorization") else { return Err(ErrorUnauthorized("Unauthorized")) };
+            let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
+            if let Ok(user) = db.get_user_by_token(token) {
+                Ok(user)
             } else {
                 Err(ErrorUnauthorized("Unauthorized"))
             }

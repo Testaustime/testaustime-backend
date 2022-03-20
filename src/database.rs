@@ -125,12 +125,11 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_user_by_token(&self, token: &str) -> Result<i32, TimeError> {
+    pub fn get_user_by_token(&self, token: &str) -> Result<RegisteredUser, TimeError> {
         use crate::schema::RegisteredUsers::dsl::*;
         let user = RegisteredUsers
-            .select(id)
             .filter(auth_token.eq(token))
-            .first::<i32>(&self.pool.get()?)?;
+            .first::<RegisteredUser>(&self.pool.get()?)?;
         Ok(user)
     }
 

@@ -4,17 +4,11 @@ use actix_web::{
     Responder,
 };
 
-use crate::{database::Database, requests::DataRequest, user::UserId};
+use crate::{database::Database, models::RegisteredUser, requests::DataRequest, user::UserId};
 
 #[get("/users/@me")]
-pub async fn my_profile(user: UserId, db: Data<Database>) -> Result<impl Responder> {
-    match db.get_user_by_id(user.id) {
-        Ok(user) => Ok(web::Json(user)),
-        Err(e) => {
-            error!("{}", e);
-            Err(ErrorInternalServerError(e))
-        }
-    }
+pub async fn my_profile(user: RegisteredUser, db: Data<Database>) -> Result<impl Responder> {
+    Ok(web::Json(user))
 }
 
 #[get("/users/{username}/activity/data")]
