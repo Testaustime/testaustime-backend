@@ -66,10 +66,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T"#,
             ))
-            .wrap(RateLimiter {
-                storage: ratelimiter.clone(),
-                use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-            })
             .service(
                 web::scope("/activity")
                     .wrap(RateLimiter {
