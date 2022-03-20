@@ -64,7 +64,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(Logger::new(
-                r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T"#,
+                r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
             ))
             .service(
                 web::scope("/activity")
