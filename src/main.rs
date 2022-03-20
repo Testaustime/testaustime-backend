@@ -75,8 +75,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::activity::update)
                     .service(api::activity::flush),
             )
-                .service(
-                    web::scope("/")
+            .service(
+                web::scope("")
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
@@ -91,8 +91,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::friends::regenerate_friend_code)
                     .service(api::friends::remove)
                     .service(api::users::my_profile)
-                    .service(api::users::get_activities)
-                )
+                    .service(api::users::get_activities),
+            )
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store))
     })
