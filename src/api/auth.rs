@@ -87,7 +87,7 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
     }
     if data.username.len() < 2 || data.username.len() > 32 {
         return Err(actix_web::error::ErrorBadRequest(
-            "Username has to be between 8 and 32 characters long",
+            "Username has to be between 2 and 32 characters long",
         ));
     }
     match db.new_user(&data.username, &data.password) {
@@ -105,9 +105,9 @@ pub async fn changepassword(
     data: Json<PasswordChangeRequest>,
     db: Data<Database>,
 ) -> Result<impl Responder> {
-    if data.new.len() < 8 {
+    if data.password.len() < 8 || data.password.len() > 128 {
         return Err(actix_web::error::ErrorBadRequest(
-            "Password has to be at least 8 characters long",
+            "Password has to be between 8 and 128 characters long",
         ));
     }
     match db.get_user_by_id(userid.id) {
