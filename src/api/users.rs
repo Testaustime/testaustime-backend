@@ -7,7 +7,7 @@ use actix_web::{
 use crate::{database::Database, models::RegisteredUser, requests::DataRequest, user::UserId};
 
 #[get("/users/@me")]
-pub async fn my_profile(user: RegisteredUser, db: Data<Database>) -> Result<impl Responder> {
+pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder> {
     Ok(web::Json(user))
 }
 
