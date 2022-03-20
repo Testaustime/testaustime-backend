@@ -6,10 +6,10 @@ table! {
         user_id -> Integer,
         start_time -> Datetime,
         duration -> Integer,
-        project_name -> Nullable<Text>,
-        language -> Nullable<Text>,
-        editor_name -> Nullable<Text>,
-        hostname -> Nullable<Text>,
+        project_name -> Nullable<Varchar>,
+        language -> Nullable<Varchar>,
+        editor_name -> Nullable<Varchar>,
+        hostname -> Nullable<Varchar>,
     }
 }
 
@@ -24,8 +24,8 @@ table! {
 table! {
     RegisteredUsers (id) {
         id -> Integer,
-        auth_token -> Text,
-        user_name -> Text,
+        auth_token -> Varchar,
+        user_name -> Varchar,
         friend_code -> Nullable<Varchar>,
         password -> Binary,
         salt -> Binary,

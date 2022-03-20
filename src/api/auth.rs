@@ -7,7 +7,7 @@ use actix_web::{
     Error, FromRequest, HttpRequest, HttpResponse, Responder,
 };
 
-use crate::{database::Database, requests::*, user::UserId, models::RegisteredUser};
+use crate::{database::Database, models::RegisteredUser, requests::*, user::UserId};
 
 impl FromRequest for UserId {
     type Error = Error;
@@ -82,12 +82,12 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(actix_web::error::ErrorBadRequest(
-            "Password has to be at least 8 characters long",
+            "Password has to be between 8 and 128 characters long",
         ));
     }
     if data.username.len() < 2 || data.username.len() > 32 {
         return Err(actix_web::error::ErrorBadRequest(
-            "Password has to be at least 8 characters long",
+            "Username has to be between 8 and 32 characters long",
         ));
     }
     match db.new_user(&data.username, &data.password) {

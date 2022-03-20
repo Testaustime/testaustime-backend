@@ -19,6 +19,34 @@ pub async fn update(
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder> {
     let heartbeat = heartbeat;
+    if let Some(project) = &heartbeat.project_name {
+        if project.len() > 32 {
+            return Err(actix_web::error::ErrorBadRequest(
+                "Project name cannot be longer than 32 characters",
+            ));
+        }
+    }
+    if let Some(language) = &heartbeat.language {
+        if language.len() > 32 {
+            return Err(actix_web::error::ErrorBadRequest(
+                "Language cannot be longer than 32 characters",
+            ));
+        }
+    }
+    if let Some(editor) = &heartbeat.editor_name {
+        if editor.len() > 32 {
+            return Err(actix_web::error::ErrorBadRequest(
+                "Editor name cannot be longer than 32 characters",
+            ));
+        }
+    }
+    if let Some(hostname) = &heartbeat.hostname {
+        if hostname.len() > 32 {
+            return Err(actix_web::error::ErrorBadRequest(
+                "Hostname cannot be longer than 32 characters",
+            ));
+        }
+    }
     match heartbeats.get(&user) {
         Some(test) => {
             let (inner_heartbeat, start, duration) = test.to_owned();
