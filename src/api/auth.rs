@@ -80,7 +80,12 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 
 #[post("/auth/register")]
 pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
-    if data.password.len() < 8 {
+    if data.password.len() < 8 || data.password.len() > 128 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "Password has to be at least 8 characters long",
+        ));
+    }
+    if data.username.len() < 2 || data.username.len() > 32 {
         return Err(actix_web::error::ErrorBadRequest(
             "Password has to be at least 8 characters long",
         ));
