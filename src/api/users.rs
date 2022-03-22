@@ -4,11 +4,14 @@ use actix_web::{
     Responder,
 };
 
-use crate::{database::Database, models::RegisteredUser, requests::DataRequest, user::UserId};
+use crate::{
+    database::Database, error::TimeError, models::RegisteredUser, requests::DataRequest,
+    user::UserId,
+};
 
 #[get("/users/@me")]
-pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder> {
-    Ok(web::Json(user))
+pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder, TimeError> {
+    return Ok(web::Json(user));
 }
 
 #[get("/users/{username}/activity/data")]
@@ -17,7 +20,7 @@ pub async fn get_activities(
     path: Path<(String,)>,
     user: UserId,
     db: Data<Database>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, TimeError> {
     if path.0 == "@me" {
         let data = block(move || db.get_activity(data.into_inner(), user.id).unwrap()).await?;
         Ok(web::Json(data))
@@ -34,10 +37,10 @@ pub async fn get_activities(
                         let data = db.get_activity(data.into_inner(), friend_id)?;
                         Ok(web::Json(data))
                     } else {
-                        Err(ErrorUnauthorized("This user is not your friend"))
+                        Err(TimeError::Unauthorized)
                     }
                 }
-                Err(e) => Err(ErrorInternalServerError(e)),
+                Err(e) => Err(e),
             }
         }
     }

@@ -6,7 +6,7 @@ use actix_web::{
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 
-use crate::{database::Database, requests::*, user::UserId};
+use crate::{database::Database, requests::*, user::UserId, error::TimeError};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -17,33 +17,33 @@ pub async fn update(
     heartbeat: Json<HeartBeat>,
     db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, TimeError> {
     let heartbeat = heartbeat;
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 32 {
-            return Err(actix_web::error::ErrorBadRequest(
-                "Project name cannot be longer than 32 characters",
+            return Err(TimeError::TooLongError(
+                "Project".to_string(), 32,
             ));
         }
     }
     if let Some(language) = &heartbeat.language {
         if language.len() > 32 {
-            return Err(actix_web::error::ErrorBadRequest(
-                "Language cannot be longer than 32 characters",
+            return Err(TimeError::TooLongError(
+                "Language".to_string(), 32,
             ));
         }
     }
     if let Some(editor) = &heartbeat.editor_name {
         if editor.len() > 32 {
-            return Err(actix_web::error::ErrorBadRequest(
-                "Editor name cannot be longer than 32 characters",
+            return Err(TimeError::TooLongError(
+                "Editor".to_string(), 32,
             ));
         }
     }
     if let Some(hostname) = &heartbeat.hostname {
         if hostname.len() > 32 {
-            return Err(actix_web::error::ErrorBadRequest(
-                "Hostname cannot be longer than 32 characters",
+            return Err(TimeError::TooLongError(
+                "Hostname".to_string(), 32,
             ));
         }
     }
@@ -59,9 +59,9 @@ pub async fn update(
                     // end session and start new
                     let res =
                         match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
-                            Ok(_) => Ok(HttpResponse::Ok().body(0.to_string())),
+                            Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
                             Err(e) => Err(ErrorInternalServerError(e)),
-                        };
+                        }?;
                     heartbeats.insert(
                         user,
                         (
@@ -70,7 +70,7 @@ pub async fn update(
                             Duration::seconds(0),
                         ),
                     );
-                    res
+                    Ok(res)
                 } else {
                     // Extend current coding session if heartbeat matches and it has been under the maximum duration of a break
                     heartbeats.insert(
@@ -86,9 +86,9 @@ pub async fn update(
             } else {
                 // Flush current session and start new session if heartbeat changes
                 let res = match db.add_activity(user.id, inner_heartbeat.clone(), start, duration) {
-                    Ok(_) => Ok(HttpResponse::Ok().body(0.to_string())),
+                    Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
                     Err(e) => Err(ErrorInternalServerError(e)),
-                };
+                }?;
                 heartbeats.insert(
                     user,
                     (
@@ -97,7 +97,7 @@ pub async fn update(
                         Duration::seconds(0),
                     ),
                 );
-                res
+                Ok(res)
             }
         }
         None => {
@@ -120,7 +120,7 @@ pub async fn flush(
     user: UserId,
     db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, TimeError> {
     match heartbeats.get(&user) {
         Some(flushme) => {
             let (inner_heartbeat, start, duration) = flushme.to_owned();
@@ -128,7 +128,7 @@ pub async fn flush(
             heartbeats.remove(&user);
             match db.add_activity(user.id, inner_heartbeat, start, duration) {
                 Ok(_) => Ok(HttpResponse::Ok().finish()),
-                Err(e) => Err(ErrorInternalServerError(e)),
+                Err(e) => Err(e),
             }
         }
         None => Ok(HttpResponse::Ok().finish()),
@@ -136,7 +136,7 @@ pub async fn flush(
 }
 
 #[delete("/activity/delete")]
-pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder> {
+pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder, TimeError> {
     let deleted = db.delete_activity(
         user.id,
         body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?,
@@ -144,6 +144,6 @@ pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<im
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {
-        Err(ErrorBadRequest("Invalid id or Unauthorized"))
+        Err(TimeError::BadId)
     }
 }

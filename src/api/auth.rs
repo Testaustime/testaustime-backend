@@ -3,11 +3,11 @@ use std::{future::Future, pin::Pin};
 use actix_web::{
     dev::Payload,
     error::*,
-    web::{Data, Json},
+    web::{block, Data, Json},
     Error, FromRequest, HttpRequest, HttpResponse, Responder,
 };
 
-use crate::{database::Database, models::RegisteredUser, requests::*, user::UserId};
+use crate::{database::Database, models::RegisteredUser, requests::*, user::UserId, error::TimeError};
 
 impl FromRequest for UserId {
     type Error = Error;
@@ -35,22 +35,27 @@ impl FromRequest for RegisteredUser {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let db = Data::extract(req);
-        let headers = req.headers().clone();
+        let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
-            let db: Data<Database> = db.await?;
-            let Some(auth) = headers.get("Authorization") else { return Err(ErrorUnauthorized("Unauthorized")) };
-            let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
-            if let Ok(user) = db.get_user_by_token(token) {
-                Ok(user)
+            if let Some(auth) = auth {
+                let db: Data<Database> = db.await?;
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
+                let token = token.to_owned();
+                let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
+                if let Ok(user) = user {
+                    Ok(user)
+                } else {
+                    Err(ErrorUnauthorized("Unauthorized"))
+                }
             } else {
-                Err(ErrorUnauthorized("Unauthorized"))
+                return Err(ErrorUnauthorized("Unauthorized"));
             }
         })
     }
 }
 
 #[post("/auth/login")]
-pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
+pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder, TimeError> {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
             Ok(true) => {
@@ -58,14 +63,14 @@ pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<im
                 Ok(HttpResponse::Ok().body(token))
             }
             Ok(false) => Ok(HttpResponse::Unauthorized().body("Invalid password or username")),
-            Err(e) => Err(ErrorInternalServerError(e)),
+            Err(e) => Err(e),
         },
         Err(_) => Ok(HttpResponse::Unauthorized().body("No such user")),
     }
 }
 
 #[post("/auth/regenerate")]
-pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder> {
+pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
     match db.regenerate_token(user.id) {
         Ok(token) => {
             let token = json!({ "token": token }).to_string();
@@ -73,7 +78,7 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
         }
         Err(e) => {
             error!("{}", e);
-            Err(ErrorInternalServerError(e))
+            Err(e)
         }
     }
 }
