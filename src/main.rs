@@ -11,11 +11,7 @@ mod utils;
 
 use actix::prelude::*;
 use actix_cors::Cors;
-use actix_web::{
-    web,
-    web::Data,
-    App, HttpServer, middleware::Logger,
-};
+use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
 use serde_derive::Deserialize;
 use testausratelimiter::*;
 

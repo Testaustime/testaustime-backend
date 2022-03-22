@@ -4,14 +4,16 @@ use actix_web::{
     dev::Payload,
     error::*,
     web::{block, Data, Json},
-    Error, FromRequest, HttpRequest, HttpResponse, Responder,
+    FromRequest, HttpRequest, HttpResponse, Responder,
 };
 
-use crate::{database::Database, models::RegisteredUser, requests::*, user::UserId, error::TimeError};
+use crate::{
+    database::Database, error::TimeError, models::RegisteredUser, requests::*, user::UserId,
+};
 
 impl FromRequest for UserId {
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Error>>>>;
+    type Error = TimeError;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Self::Error>>>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let db = Data::extract(req);
@@ -19,24 +21,24 @@ impl FromRequest for UserId {
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<Database> = db.await?;
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#)) };
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                 let token = token.to_owned();
                 let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
                 if let Ok(user) = user {
-                    Ok(UserId{id: user.id})
+                    Ok(UserId { id: user.id })
                 } else {
-                    Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#))
+                    Err(TimeError::Unauthorized)
                 }
             } else {
-                return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#));
+                return Err(TimeError::Unauthorized);
             }
         })
     }
 }
 
 impl FromRequest for RegisteredUser {
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Error>>>>;
+    type Error = TimeError;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let db = Data::extract(req);
@@ -44,23 +46,26 @@ impl FromRequest for RegisteredUser {
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<Database> = db.await?;
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#)) };
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                 let token = token.to_owned();
                 let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
                 if let Ok(user) = user {
                     Ok(user)
                 } else {
-                    Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#))
+                    Err(TimeError::Unauthorized)
                 }
             } else {
-                return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#));
+                return Err(TimeError::Unauthorized);
             }
         })
     }
 }
 
 #[post("/auth/login")]
-pub async fn login(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder, TimeError> {
+pub async fn login(
+    data: Json<RegisterRequest>,
+    db: Data<Database>,
+) -> Result<impl Responder, TimeError> {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
             Ok(true) => {

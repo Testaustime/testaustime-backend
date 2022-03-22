@@ -6,7 +6,7 @@ use actix_web::{
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 
-use crate::{database::Database, requests::*, user::UserId, error::TimeError};
+use crate::{database::Database, error::TimeError, requests::*, user::UserId};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -21,30 +21,22 @@ pub async fn update(
     let heartbeat = heartbeat;
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 32 {
-            return Err(TimeError::TooLongError(
-                "Project".to_string(), 32,
-            ));
+            return Err(TimeError::TooLongError("Project".to_string(), 32));
         }
     }
     if let Some(language) = &heartbeat.language {
         if language.len() > 32 {
-            return Err(TimeError::TooLongError(
-                "Language".to_string(), 32,
-            ));
+            return Err(TimeError::TooLongError("Language".to_string(), 32));
         }
     }
     if let Some(editor) = &heartbeat.editor_name {
         if editor.len() > 32 {
-            return Err(TimeError::TooLongError(
-                "Editor".to_string(), 32,
-            ));
+            return Err(TimeError::TooLongError("Editor".to_string(), 32));
         }
     }
     if let Some(hostname) = &heartbeat.hostname {
         if hostname.len() > 32 {
-            return Err(TimeError::TooLongError(
-                "Hostname".to_string(), 32,
-            ));
+            return Err(TimeError::TooLongError("Hostname".to_string(), 32));
         }
     }
     match heartbeats.get(&user) {
@@ -136,7 +128,11 @@ pub async fn flush(
 }
 
 #[delete("/activity/delete")]
-pub async fn delete(user: UserId, db: Data<Database>, body: String) -> Result<impl Responder, TimeError> {
+pub async fn delete(
+    user: UserId,
+    db: Data<Database>,
+    body: String,
+) -> Result<impl Responder, TimeError> {
     let deleted = db.delete_activity(
         user.id,
         body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?,
