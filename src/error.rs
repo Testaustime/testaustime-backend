@@ -36,6 +36,8 @@ impl ResponseError for TimeError {
         error!("{}", self);
         match self {
             TimeError::BadId => StatusCode::BAD_REQUEST,
+            TimeError::CurrentUser => StatusCode::CONFLICT,
+            TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
