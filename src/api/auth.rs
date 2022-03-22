@@ -69,13 +69,13 @@ pub async fn login(
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
             Ok(true) => {
-                let token = json!({ "token": user.auth_token }).to_string();
-                Ok(HttpResponse::Ok().body(token))
+                let token = json!({ "token": user.auth_token });
+                Ok(Json(token))
             }
-            Ok(false) => Ok(HttpResponse::Unauthorized().body("Invalid password or username")),
+            Ok(false) => Err(TimeError::Unauthorized),
             Err(e) => Err(e),
         },
-        Err(_) => Ok(HttpResponse::Unauthorized().body("No such user")),
+        Err(_) => Err(TimeError::Unauthorized),
     }
 }
 
@@ -83,8 +83,8 @@ pub async fn login(
 pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
     match db.regenerate_token(user.id) {
         Ok(token) => {
-            let token = json!({ "token": token }).to_string();
-            Ok(HttpResponse::Ok().body(token))
+            let token = json!({ "token": token });
+            Ok(Json(token))
         }
         Err(e) => {
             error!("{}", e);
@@ -107,8 +107,8 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
     }
     match db.new_user(&data.username, &data.password) {
         Ok(token) => {
-            let token = json!({ "token": token }).to_string();
-            Ok(HttpResponse::Ok().body(token))
+            let token = json!({ "token": token });
+            Ok(Json(token))
         }
         Err(e) => Err(ErrorInternalServerError(e)),
     }
