@@ -107,7 +107,19 @@ impl Database {
         Ok(token)
     }
 
-    pub fn change_user_password_to(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
+    pub fn change_username(&self, user: i32, new_username: &str) -> Result<(), TimeError> {
+        if self.user_exists(new_username)? {
+            return Err(TimeError::UserExistsError);
+        }
+        use crate::schema::RegisteredUsers::dsl::*;
+        diesel::update(crate::schema::RegisteredUsers::table)
+            .filter(id.eq(user))
+            .set(user_name.eq(new_username))
+            .execute(&self.pool.get()?)?;
+        Ok(())
+    }
+
+    pub fn change_password(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
         let new_salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
         let password_hash = argon2
