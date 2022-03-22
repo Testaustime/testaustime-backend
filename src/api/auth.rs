@@ -105,7 +105,7 @@ pub async fn changepassword(
     data: Json<PasswordChangeRequest>,
     db: Data<Database>,
 ) -> Result<impl Responder> {
-    if data.password.len() < 8 || data.password.len() > 128 {
+    if data.new.len() < 8 || data.new.len() > 128 {
         return Err(actix_web::error::ErrorBadRequest(
             "Password has to be between 8 and 128 characters long",
         ));
