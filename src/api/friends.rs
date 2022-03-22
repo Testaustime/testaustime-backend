@@ -25,7 +25,7 @@ pub async fn add_friend(
                 _ => e,
             })
         }
-        Ok(name) => Ok(HttpResponse::Ok().body(json!({ "name": name }).to_string())),
+        Ok(name) => Ok(web::Json(json!({ "name": name }))),
     }
 }
 
