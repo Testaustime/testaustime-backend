@@ -15,15 +15,20 @@ impl FromRequest for UserId {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let db = Data::extract(req);
-        let headers = req.headers().clone();
+        let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
-            let db: Data<Database> = db.await?;
-            let Some(auth) = headers.get("Authorization") else { return Err(ErrorUnauthorized("Unauthorized")) };
-            let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
-            if let Ok(user) = db.get_user_by_token(token) {
-                Ok(UserId { id: user.id })
+            if let Some(auth) = auth {
+                let db: Data<Database> = db.await?;
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#)) };
+                let token = token.to_owned();
+                let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
+                if let Ok(user) = user {
+                    Ok(UserId{id: user.id})
+                } else {
+                    Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#))
+                }
             } else {
-                Err(ErrorUnauthorized("Unauthorized"))
+                return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#));
             }
         })
     }
@@ -39,16 +44,16 @@ impl FromRequest for RegisteredUser {
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<Database> = db.await?;
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized("Unathorized")) };
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#)) };
                 let token = token.to_owned();
                 let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
                 if let Ok(user) = user {
                     Ok(user)
                 } else {
-                    Err(ErrorUnauthorized("Unauthorized"))
+                    Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#))
                 }
             } else {
-                return Err(ErrorUnauthorized("Unauthorized"));
+                return Err(ErrorUnauthorized(r#"{"error":"Unauthorized"}"#));
             }
         })
     }
