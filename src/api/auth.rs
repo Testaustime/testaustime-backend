@@ -114,6 +114,33 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
     }
 }
 
+#[post("/auth/changeusername")]
+pub async fn changeusername(
+    userid: UserId,
+    data: Json<UsernameChangeRequest>,
+    db: Data<Database>,
+) -> Result<impl Responder> {
+    if data.new.len() < 2 || data.new.len() > 32 {
+        return Err(actix_web::error::ErrorBadRequest(
+            "New username has to be between 2 and 32 characters long",
+        ));
+    }
+
+    match db.get_user_by_id(userid.id) {
+        Ok(user) => {
+            match db.change_username(user.id, &data.new) {
+                Ok(_) => Ok(HttpResponse::Ok().finish()),
+                Err(e) => Err(ErrorInternalServerError(e)),
+            }
+        }
+        Err(e) => {
+            error!("{}", e);
+            Err(ErrorInternalServerError(e))
+        }
+    }
+}
+
+
 #[post("/auth/changepassword")]
 pub async fn changepassword(
     userid: UserId,
@@ -131,7 +158,7 @@ pub async fn changepassword(
                 Ok(k) => {
                     if k || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)
-                        match db.change_user_password_to(userid.id, &data.new) {
+                        match db.change_password(userid.id, &data.new) {
                             Ok(_) => Ok(HttpResponse::Ok().finish()),
                             Err(e) => Err(ErrorInternalServerError(e)),
                         }
@@ -148,3 +175,4 @@ pub async fn changepassword(
         }
     }
 }
+

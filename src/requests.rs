@@ -31,6 +31,11 @@ pub struct RegisterRequest {
 }
 
 #[derive(Deserialize)]
+pub struct UsernameChangeRequest {
+    pub new: String,
+}
+
+#[derive(Deserialize)]
 pub struct PasswordChangeRequest {
     pub old: String,
     pub new: String,
