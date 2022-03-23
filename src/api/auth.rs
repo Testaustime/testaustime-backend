@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin};
 use actix_web::{
     dev::Payload,
     error::*,
-    web::{block, Data, Json},
+    web::{Data, Json},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
 
@@ -22,8 +22,7 @@ impl FromRequest for UserId {
             if let Some(auth) = auth {
                 let db: Data<Database> = db.await?;
                 let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                let token = token.to_owned();
-                let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
+                let user = db.to_owned().get_user_by_token(&token);
                 if let Ok(user) = user {
                     Ok(UserId { id: user.id })
                 } else {
@@ -47,8 +46,7 @@ impl FromRequest for RegisteredUser {
             if let Some(auth) = auth {
                 let db: Data<Database> = db.await?;
                 let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                let token = token.to_owned();
-                let user = block(move || db.to_owned().get_user_by_token(&token).unwrap()).await;
+                let user = db.to_owned().get_user_by_token(&token);
                 if let Ok(user) = user {
                     Ok(user)
                 } else {
