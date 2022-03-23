@@ -94,15 +94,15 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 }
 
 #[post("/auth/register")]
-pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder> {
+pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
-        return Err(actix_web::error::ErrorBadRequest(
-            "Password has to be between 8 and 128 characters long",
+        return Err(TimeError::InvalidLength(
+            "Password has to be between 8 and 128 characters long".to_string(),
         ));
     }
     if data.username.len() < 2 || data.username.len() > 32 {
-        return Err(actix_web::error::ErrorBadRequest(
-            "Username has to be between 2 and 32 characters long",
+        return Err(TimeError::InvalidLength(
+            "Username has to be between 8 and 128 characters long".to_string(),
         ));
     }
     match db.new_user(&data.username, &data.password) {
@@ -110,7 +110,7 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
             let token = json!({ "token": token });
             Ok(Json(token))
         }
-        Err(e) => Err(ErrorInternalServerError(e)),
+        Err(e) => Err(e),
     }
 }
 
@@ -119,37 +119,34 @@ pub async fn changeusername(
     userid: UserId,
     data: Json<UsernameChangeRequest>,
     db: Data<Database>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, TimeError> {
     if data.new.len() < 2 || data.new.len() > 32 {
-        return Err(actix_web::error::ErrorBadRequest(
-            "New username has to be between 2 and 32 characters long",
+        return Err(TimeError::InvalidLength(
+            "Username is not between 2 and 32 chars".to_string(),
         ));
     }
 
     match db.get_user_by_id(userid.id) {
-        Ok(user) => {
-            match db.change_username(user.id, &data.new) {
-                Ok(_) => Ok(HttpResponse::Ok().finish()),
-                Err(e) => Err(ErrorInternalServerError(e)),
-            }
-        }
+        Ok(user) => match db.change_username(user.id, &data.new) {
+            Ok(_) => Ok(HttpResponse::Ok().finish()),
+            Err(e) => Err(e),
+        },
         Err(e) => {
             error!("{}", e);
-            Err(ErrorInternalServerError(e))
+            Err(e)
         }
     }
 }
-
 
 #[post("/auth/changepassword")]
 pub async fn changepassword(
     userid: UserId,
     data: Json<PasswordChangeRequest>,
     db: Data<Database>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, TimeError> {
     if data.new.len() < 8 || data.new.len() > 128 {
-        return Err(actix_web::error::ErrorBadRequest(
-            "Password has to be between 8 and 128 characters long",
+        return Err(TimeError::InvalidLength(
+            "Password has to be between 8 and 128 characters long".to_string(),
         ));
     }
     match db.get_user_by_id(userid.id) {
@@ -160,19 +157,18 @@ pub async fn changepassword(
                         // Some noobs don't have password (me)
                         match db.change_password(userid.id, &data.new) {
                             Ok(_) => Ok(HttpResponse::Ok().finish()),
-                            Err(e) => Err(ErrorInternalServerError(e)),
+                            Err(e) => Err(e),
                         }
                     } else {
-                        Err(ErrorUnauthorized("Invalid password or username"))
+                        Err(TimeError::Unauthorized)
                     }
                 }
-                Err(e) => Err(ErrorInternalServerError(e)),
+                Err(e) => Err(e),
             }
         }
         Err(e) => {
             error!("{}", e);
-            Err(ErrorInternalServerError(e))
+            Err(e)
         }
     }
 }
-

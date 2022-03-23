@@ -25,8 +25,8 @@ pub enum TimeError {
     Unauthorized,
     #[error(transparent)]
     BlockingError(#[from] BlockingError),
-    #[error("{0} is over {1} long")]
-    TooLongError(String, i32),
+    #[error("{0}")]
+    InvalidLength(String),
     #[error("Bad id")]
     BadId,
 }
@@ -36,6 +36,7 @@ impl ResponseError for TimeError {
         error!("{}", self);
         match self {
             TimeError::BadId => StatusCode::BAD_REQUEST,
+            TimeError::InvalidLength(_) => StatusCode::BAD_REQUEST,
             TimeError::CurrentUser => StatusCode::CONFLICT,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
