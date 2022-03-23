@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 table! {
     CodingActivities (id) {
         id -> Integer,
