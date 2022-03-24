@@ -66,10 +66,7 @@ pub async fn login(
 ) -> Result<impl Responder, TimeError> {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
-            Ok(true) => {
-                let token = json!({ "token": user.auth_token });
-                Ok(Json(token))
-            }
+            Ok(true) => Ok(Json(user)),
             Ok(false) => Err(TimeError::Unauthorized),
             Err(e) => Err(e),
         },
@@ -92,7 +89,10 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 }
 
 #[post("/auth/register")]
-pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result<impl Responder, TimeError> {
+pub async fn register(
+    data: Json<RegisterRequest>,
+    db: Data<Database>,
+) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
             "Password has to be between 8 and 128 characters long".to_string(),
@@ -103,13 +103,7 @@ pub async fn register(data: Json<RegisterRequest>, db: Data<Database>) -> Result
             "Username has to be between 8 and 128 characters long".to_string(),
         ));
     }
-    match db.new_user(&data.username, &data.password) {
-        Ok(token) => {
-            let token = json!({ "token": token });
-            Ok(Json(token))
-        }
-        Err(e) => Err(e),
-    }
+    Ok(Json(db.new_user(&data.username, &data.password)?))
 }
 
 #[post("/auth/changeusername")]
@@ -149,7 +143,7 @@ pub async fn changepassword(
     }
     match db.get_user_by_id(userid.id) {
         Ok(user) => {
-            match db.verify_user_password(&user.user_name, &data.old) {
+            match db.verify_user_password(&user.username, &data.old) {
                 Ok(k) => {
                     if k || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)

@@ -5,8 +5,8 @@ pub struct RegisteredUser {
     pub id: i32,
     #[serde(skip_serializing)]
     pub auth_token: String,
-    pub user_name: String,
-    pub friend_code: Option<String>,
+    pub friend_code: String,
+    pub username: String,
     #[serde(skip_serializing)]
     pub password: Vec<u8>,
     #[serde(skip_serializing)]
@@ -14,16 +14,18 @@ pub struct RegisteredUser {
     pub registration_time: chrono::NaiveDateTime,
 }
 
-use crate::schema::RegisteredUsers;
+use crate::schema::registered_users;
 
-#[derive(Insertable)]
-#[table_name = "RegisteredUsers"]
-pub struct NewRegisteredUser<'a> {
+#[derive(Insertable, Serialize, Clone)]
+#[table_name = "registered_users"]
+pub struct NewRegisteredUser {
     pub auth_token: String,
-    pub user_name: String,
-    pub friend_code: Option<String>,
-    pub password: &'a [u8],
-    pub salt: &'a [u8],
+    pub username: String,
+    pub friend_code: String,
+    #[serde(skip_serializing)]
+    pub password: Vec<u8>,
+    #[serde(skip_serializing)]
+    pub salt: Vec<u8>,
     pub registration_time: chrono::NaiveDateTime,
 }
 
@@ -34,10 +36,10 @@ pub struct FriendRelation {
     pub greater_id: i32,
 }
 
-use crate::schema::FriendRelations;
+use crate::schema::friend_relations;
 
 #[derive(Insertable)]
-#[table_name = "FriendRelations"]
+#[table_name = "friend_relations"]
 pub struct NewFriendRelation {
     pub lesser_id: i32,
     pub greater_id: i32,
@@ -56,10 +58,10 @@ pub struct CodingActivity {
     pub hostname: Option<String>,
 }
 
-use crate::schema::CodingActivities;
+use crate::schema::coding_activities;
 
 #[derive(Insertable)]
-#[table_name = "CodingActivities"]
+#[table_name = "coding_activities"]
 pub struct NewCodingActivity {
     pub user_id: i32,
     pub start_time: chrono::NaiveDateTime,
