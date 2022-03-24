@@ -1,11 +1,9 @@
-#![allow(non_snake_case)]
-
 table! {
-    CodingActivities (id) {
-        id -> Integer,
-        user_id -> Integer,
-        start_time -> Datetime,
-        duration -> Integer,
+    coding_activities (id) {
+        id -> Int4,
+        user_id -> Int4,
+        start_time -> Timestamp,
+        duration -> Int4,
         project_name -> Nullable<Varchar>,
         language -> Nullable<Varchar>,
         editor_name -> Nullable<Varchar>,
@@ -14,29 +12,29 @@ table! {
 }
 
 table! {
-    FriendRelations (id) {
-        id -> Integer,
-        lesser_id -> Integer,
-        greater_id -> Integer,
+    friend_relations (id) {
+        id -> Int4,
+        lesser_id -> Int4,
+        greater_id -> Int4,
     }
 }
 
 table! {
-    RegisteredUsers (id) {
-        id -> Integer,
+    registered_users (id) {
+        id -> Int4,
         auth_token -> Varchar,
-        user_name -> Varchar,
-        friend_code -> Nullable<Varchar>,
-        password -> Binary,
-        salt -> Binary,
-        registration_time -> Datetime,
+        friend_code -> Varchar,
+        username -> Varchar,
+        password -> Bytea,
+        salt -> Bytea,
+        registration_time -> Timestamp,
     }
 }
 
-joinable!(CodingActivities -> RegisteredUsers (user_id));
+joinable!(coding_activities -> registered_users (user_id));
 
 allow_tables_to_appear_in_same_query!(
-    CodingActivities,
-    FriendRelations,
-    RegisteredUsers,
+    coding_activities,
+    friend_relations,
+    registered_users,
 );
