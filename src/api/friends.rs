@@ -46,10 +46,8 @@ pub async fn regenerate_friend_code(
     db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     match db.regenerate_friend_code(user.id) {
-        Ok(code) => {
-            let token = String::from("ttfc_").push_str(&code);
-            Ok(HttpResponse::Ok().body(json!({ "token": token }).to_string()))
-        }
+        Ok(code) => Ok(HttpResponse::Ok()
+            .body(json!({ "friend_code": format!("ttfc_{}", &code) }).to_string())),
         Err(e) => {
             error!("{}", e);
             Err(e)
