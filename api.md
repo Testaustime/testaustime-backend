@@ -206,7 +206,7 @@ Required headers:
 Authorization: Bearer <token>
 ```
 
-### POST /friends/regenrate
+### POST /friends/regenerate
 
 Regenerates the authenticating users friend code
 
