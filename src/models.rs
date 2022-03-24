@@ -14,6 +14,28 @@ pub struct RegisteredUser {
     pub registration_time: chrono::NaiveDateTime,
 }
 
+// This is here so that vilepis doesn't actually give friends eachothers auth tokens
+#[derive(Clone, Debug, Serialize)]
+pub struct SelfUser {
+    pub id: i32,
+    pub auth_token: String,
+    pub friend_code: String,
+    pub username: String,
+    pub registration_time: chrono::NaiveDateTime,
+}
+
+impl From<RegisteredUser> for SelfUser {
+    fn from(u: RegisteredUser) -> SelfUser {
+        SelfUser {
+            id: u.id,
+            auth_token: u.auth_token,
+            friend_code: u.friend_code,
+            username: u.username,
+            registration_time: u.registration_time,
+        }
+    }
+}
+
 use crate::schema::registered_users;
 
 #[derive(Insertable, Serialize, Clone)]

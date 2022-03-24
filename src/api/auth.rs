@@ -8,7 +8,11 @@ use actix_web::{
 };
 
 use crate::{
-    database::Database, error::TimeError, models::RegisteredUser, requests::*, user::UserId,
+    database::Database,
+    error::TimeError,
+    models::{RegisteredUser, SelfUser},
+    requests::*,
+    user::UserId,
 };
 
 impl FromRequest for UserId {
@@ -66,7 +70,7 @@ pub async fn login(
 ) -> Result<impl Responder, TimeError> {
     match db.get_user_by_name(&data.username) {
         Ok(user) => match db.verify_user_password(&data.username, &data.password) {
-            Ok(true) => Ok(Json(user)),
+            Ok(true) => Ok(Json(SelfUser::from(user))),
             Ok(false) => Err(TimeError::Unauthorized),
             Err(e) => Err(e),
         },
