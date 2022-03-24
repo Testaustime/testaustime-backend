@@ -5,8 +5,8 @@ pub struct RegisteredUser {
     pub id: i32,
     #[serde(skip_serializing)]
     pub auth_token: String,
-    pub username: String,
     pub friend_code: String,
+    pub username: String,
     #[serde(skip_serializing)]
     pub password: Vec<u8>,
     #[serde(skip_serializing)]
