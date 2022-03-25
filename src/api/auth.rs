@@ -101,7 +101,7 @@ pub async fn register(
     }
     if data.username.len() < 2 || data.username.len() > 32 {
         return Err(TimeError::InvalidLength(
-            "Username has to be between 8 and 128 characters long".to_string(),
+            "Username has to be between 8 and 32 characters long".to_string(),
         ));
     }
     Ok(Json(db.new_user(&data.username, &data.password)?))
