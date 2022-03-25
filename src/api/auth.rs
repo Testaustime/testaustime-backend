@@ -68,6 +68,11 @@ pub async fn login(
     data: Json<RegisterRequest>,
     db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
+    if data.password.len() > 128 {
+        return Err(TimeError::InvalidLength(
+            "Password cannot be longer than 128 characters".to_string(),
+        ));
+    }
     match db.verify_user_password(&data.username, &data.password) {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
         Ok(None) => Err(TimeError::Unauthorized),
