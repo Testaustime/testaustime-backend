@@ -56,22 +56,18 @@ impl Database {
             .first::<RegisteredUser>(&self.pool.get()?)?)
     }
 
-    fn get_user_hash_and_salt(&self, target_username: &str) -> Result<(Vec<u8>, Vec<u8>), TimeError> {
-        use crate::schema::registered_users::dsl::*;
-        Ok(registered_users
-            .filter(username.eq(target_username))
-            .select((password, salt))
-            .first::<(Vec<u8>, Vec<u8>)>(&self.pool.get()?)?)
-    }
-
-    pub fn verify_user_password(&self, username: &str, password: &str) -> Result<bool, TimeError> {
-        let (hash, salt) = self.get_user_hash_and_salt(username)?;
+    pub fn verify_user_password(&self, username: &str, password: &str) -> Result<Option<RegisteredUser>, TimeError> {
+        let user = self.get_user_by_name(username)?;
         let argon2 = Argon2::default();
-        let Ok(salt) = SaltString::new(&String::from_utf8(salt).unwrap()) else {
-            return Ok(false); // The user has no password
+        let Ok(salt) = SaltString::new(&std::str::from_utf8(&user.salt).unwrap()) else {
+            return Ok(None); // The user has no password
         };
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
-        return Ok(password_hash.hash.unwrap().as_bytes() == hash);
+        if password_hash.hash.unwrap().as_bytes() == user.password {
+            Ok(Some(user))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {

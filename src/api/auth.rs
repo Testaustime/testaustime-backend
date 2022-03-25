@@ -68,13 +68,10 @@ pub async fn login(
     data: Json<RegisterRequest>,
     db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
-    match db.get_user_by_name(&data.username) {
-        Ok(user) => match db.verify_user_password(&data.username, &data.password) {
-            Ok(true) => Ok(Json(SelfUser::from(user))),
-            Ok(false) => Err(TimeError::Unauthorized),
-            Err(e) => Err(e),
-        },
-        Err(_) => Err(TimeError::Unauthorized),
+    match db.verify_user_password(&data.username, &data.password) {
+        Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
+        Ok(None) => Err(TimeError::Unauthorized),
+        Err(e) => Err(e),
     }
 }
 
@@ -145,11 +142,12 @@ pub async fn changepassword(
             "Password has to be between 8 and 128 characters long".to_string(),
         ));
     }
+    // FIXME: This whole thing is just horrible
     match db.get_user_by_id(userid.id) {
         Ok(user) => {
             match db.verify_user_password(&user.username, &data.old) {
                 Ok(k) => {
-                    if k || user.password.iter().all(|n| *n == 0) {
+                    if k.is_some() || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)
                         match db.change_password(userid.id, &data.new) {
                             Ok(_) => Ok(HttpResponse::Ok().finish()),
