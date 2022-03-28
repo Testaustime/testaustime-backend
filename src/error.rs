@@ -31,6 +31,8 @@ pub enum TimeError {
     BadId,
 }
 
+unsafe impl Send for TimeError {}
+
 impl ResponseError for TimeError {
     fn status_code(&self) -> StatusCode {
         error!("{}", self);

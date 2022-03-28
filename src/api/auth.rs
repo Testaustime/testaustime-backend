@@ -3,16 +3,15 @@ use std::{future::Future, pin::Pin};
 use actix_web::{
     dev::Payload,
     error::*,
-    web::{Data, Json},
+    web::{Data, Json, block},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
-
 use crate::{
-    database::Database,
+    database::{get_user_by_token, new_user, get_user_by_id, change_username, verify_user_password, regenerate_token, change_password},
     error::TimeError,
     models::{RegisteredUser, SelfUser},
     requests::*,
-    user::UserId,
+    user::UserId, DbPool,
 };
 
 impl FromRequest for UserId {
@@ -24,9 +23,11 @@ impl FromRequest for UserId {
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
             if let Some(auth) = auth {
-                let db: Data<Database> = db.await?;
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                let user = db.to_owned().get_user_by_token(&token);
+                let db: Data<DbPool> = db.await?;
+                let user = block(move || { 
+                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
+                    get_user_by_token(&db.get()?, &token)
+                }).await?;
                 if let Ok(user) = user {
                     Ok(UserId { id: user.id })
                 } else {
@@ -48,9 +49,11 @@ impl FromRequest for RegisteredUser {
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
             if let Some(auth) = auth {
-                let db: Data<Database> = db.await?;
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                let user = db.to_owned().get_user_by_token(&token);
+                let db: Data<DbPool> = db.await?;
+                let user = block(move || { 
+                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
+                    get_user_by_token(&db.get()?, &token) 
+                }).await?;
                 if let Ok(user) = user {
                     Ok(user)
                 } else {
@@ -66,14 +69,14 @@ impl FromRequest for RegisteredUser {
 #[post("/auth/login")]
 pub async fn login(
     data: Json<RegisterRequest>,
-    db: Data<Database>,
+    db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
             "Password cannot be longer than 128 characters".to_string(),
         ));
     }
-    match db.verify_user_password(&data.username, &data.password) {
+    match block(move || verify_user_password(&db.get()?, &data.username, &data.password)).await? {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
         Ok(None) => Err(TimeError::Unauthorized),
         Err(e) => Err(e),
@@ -81,8 +84,8 @@ pub async fn login(
 }
 
 #[post("/auth/regenerate")]
-pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
-    match db.regenerate_token(user.id) {
+pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+    match block(move || regenerate_token(&db.get()?, user.id)).await? {
         Ok(token) => {
             let token = json!({ "token": token });
             Ok(Json(token))
@@ -97,7 +100,7 @@ pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Respond
 #[post("/auth/register")]
 pub async fn register(
     data: Json<RegisterRequest>,
-    db: Data<Database>,
+    db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -109,14 +112,14 @@ pub async fn register(
             "Username has to be between 2 and 32 characters long".to_string(),
         ));
     }
-    Ok(Json(db.new_user(&data.username, &data.password)?))
+    Ok(Json(block(move || new_user(&db.get()?, &data.username, &data.password)).await??))
 }
 
 #[post("/auth/changeusername")]
 pub async fn changeusername(
     userid: UserId,
     data: Json<UsernameChangeRequest>,
-    db: Data<Database>,
+    db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 2 || data.new.len() > 32 {
         return Err(TimeError::InvalidLength(
@@ -124,8 +127,9 @@ pub async fn changeusername(
         ));
     }
 
-    match db.get_user_by_id(userid.id) {
-        Ok(user) => match db.change_username(user.id, &data.new) {
+    let conn = db.get()?;
+    match block(move || get_user_by_id(&conn, userid.id)).await? {
+        Ok(user) => match block(move || change_username(&db.get()?, user.id, &data.new)).await? {
             Ok(_) => Ok(HttpResponse::Ok().finish()),
             Err(e) => Err(e),
         },
@@ -140,7 +144,7 @@ pub async fn changeusername(
 pub async fn changepassword(
     userid: UserId,
     data: Json<PasswordChangeRequest>,
-    db: Data<Database>,
+    db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 8 || data.new.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -148,13 +152,16 @@ pub async fn changepassword(
         ));
     }
     // FIXME: This whole thing is just horrible
-    match db.get_user_by_id(userid.id) {
+    let old = data.old.to_owned();
+    let clone = db.clone();
+    let clone2 = db.clone();
+    match block(move || get_user_by_id(&clone.get()?, userid.id)).await? {
         Ok(user) => {
-            match db.verify_user_password(&user.username, &data.old) {
+            match block(move || verify_user_password(&clone2.get()?, &user.username, &old)).await? {
                 Ok(k) => {
                     if k.is_some() || user.password.iter().all(|n| *n == 0) {
                         // Some noobs don't have password (me)
-                        match db.change_password(userid.id, &data.new) {
+                        match change_password(&db.get()?, userid.id, &data.new) {
                             Ok(_) => Ok(HttpResponse::Ok().finish()),
                             Err(e) => Err(e),
                         }

@@ -3,10 +3,9 @@ use actix_web::{
     web::{self, block, Data, Path, Query},
     Responder,
 };
-
 use crate::{
-    database::Database, error::TimeError, models::RegisteredUser, requests::DataRequest,
-    user::UserId,
+    database::{get_activity, get_user_by_name, are_friends}, error::TimeError, models::RegisteredUser, requests::DataRequest,
+    user::UserId, DbPool,
 };
 
 #[get("/users/@me")]
@@ -19,22 +18,26 @@ pub async fn get_activities(
     data: Query<DataRequest>,
     path: Path<(String,)>,
     user: UserId,
-    db: Data<Database>,
+    db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
+    let conn = db.get()?;
     if path.0 == "@me" {
-        let data = block(move || db.get_activity(data.into_inner(), user.id).unwrap()).await?;
+        let data = block(move || get_activity(&conn, data.into_inner(), user.id)).await??;
         Ok(web::Json(data))
     } else {
-        let db_clone = db.clone();
-        let friend_id = db_clone.get_user_by_name(&path.0)?.id;
+        let friend_id = get_user_by_name(&conn, &path.0)?.id;
         if friend_id == user.id {
-            let data = db.get_activity(data.into_inner(), friend_id)?;
+            let conn = db.get()?;
+            let data = block(move || get_activity(&conn, data.into_inner(), friend_id)).await??;
             Ok(web::Json(data))
         } else {
-            match db.are_friends(user.id, friend_id) {
+            match block(move || {
+                let conn = db.get()?;
+                are_friends(&conn, user.id, friend_id)
+            }).await? {
                 Ok(b) => {
                     if b {
-                        let data = db.get_activity(data.into_inner(), friend_id)?;
+                        let data = block(move || get_activity(&conn, data.into_inner(), friend_id)).await??;
                         Ok(web::Json(data))
                     } else {
                         Err(TimeError::Unauthorized)

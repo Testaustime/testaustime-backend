@@ -12,6 +12,8 @@ mod utils;
 use actix::prelude::*;
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
+use diesel::{r2d2::ConnectionManager, PgConnection};
+use r2d2::Pool;
 use serde_derive::Deserialize;
 use testausratelimiter::*;
 
@@ -37,6 +39,8 @@ pub struct TimeConfig {
     pub allowed_origin: String,
 }
 
+type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
@@ -46,7 +50,11 @@ async fn main() -> std::io::Result<()> {
         toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
             .expect("Invalid Toml in settings.toml");
 
-    let database = Data::new(database::Database::new(&config.database_url));
+    let manager = ConnectionManager::<PgConnection>::new(config.database_url);
+    let pool = Data::new(Pool::builder()
+        .build(manager)
+        .expect("Failed to create connection pool"));
+
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(8)).start();
     let heartbeat_ratelimiter =
@@ -95,7 +103,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::users::my_profile)
                     .service(api::users::get_activities),
             )
-            .app_data(Data::clone(&database))
+            .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store))
     })
     .bind(config.address)?
