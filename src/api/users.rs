@@ -1,16 +1,32 @@
 use actix_web::{
     error::*,
     web::{self, block, Data, Path, Query},
-    Responder,
+    Responder, HttpResponse,
 };
 use crate::{
-    database::{get_activity, get_user_by_name, are_friends}, error::TimeError, models::RegisteredUser, requests::DataRequest,
+    database::{get_activity, get_user_by_name, are_friends, self}, error::TimeError, models::RegisteredUser, requests::DataRequest,
     user::UserId, DbPool,
 };
+use serde_derive::Deserialize;
+
+#[derive(Deserialize)]
+pub struct UserAuthentication {
+    pub username: String,
+    pub password: String,
+}
 
 #[get("/users/@me")]
 pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder, TimeError> {
     return Ok(web::Json(user));
+}
+
+#[delete("/users/@me/delete")]
+pub async fn delete_user(pool: Data<DbPool>, user: web::Json<UserAuthentication>) -> Result<impl Responder, TimeError> {
+    let clone = pool.clone();
+    if let Some(user) = block(move || database::verify_user_password(&pool.get()?,&user.username, &user.password)).await?? {
+        block(move || database::delete_user(&clone.get()?, user.id)).await??;
+    }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/users/{username}/activity/data")]

@@ -101,7 +101,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::friends::regenerate_friend_code)
                     .service(api::friends::remove)
                     .service(api::users::my_profile)
-                    .service(api::users::get_activities),
+                    .service(api::users::get_activities)
+                    .service(api::users::delete_user),
             )
             .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store))
