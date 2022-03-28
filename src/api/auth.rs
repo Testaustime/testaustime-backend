@@ -3,15 +3,20 @@ use std::{future::Future, pin::Pin};
 use actix_web::{
     dev::Payload,
     error::*,
-    web::{Data, Json, block},
+    web::{block, Data, Json},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
+
 use crate::{
-    database::{get_user_by_token, new_user, get_user_by_id, change_username, verify_user_password, regenerate_token, change_password},
+    database::{
+        change_password, change_username, get_user_by_id, get_user_by_token, new_user,
+        regenerate_token, verify_user_password,
+    },
     error::TimeError,
     models::{RegisteredUser, SelfUser},
     requests::*,
-    user::UserId, DbPool,
+    user::UserId,
+    DbPool,
 };
 
 impl FromRequest for UserId {
@@ -24,7 +29,7 @@ impl FromRequest for UserId {
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<DbPool> = db.await?;
-                let user = block(move || { 
+                let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
                     get_user_by_token(&db.get()?, &token)
                 }).await?;
@@ -50,9 +55,9 @@ impl FromRequest for RegisteredUser {
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<DbPool> = db.await?;
-                let user = block(move || { 
+                let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&db.get()?, &token) 
+                    get_user_by_token(&db.get()?, &token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(user)
@@ -112,7 +117,9 @@ pub async fn register(
             "Username has to be between 2 and 32 characters long".to_string(),
         ));
     }
-    Ok(Json(block(move || new_user(&db.get()?, &data.username, &data.password)).await??))
+    Ok(Json(
+        block(move || new_user(&db.get()?, &data.username, &data.password)).await??,
+    ))
 }
 
 #[post("/auth/changeusername")]

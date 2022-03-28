@@ -51,9 +51,11 @@ async fn main() -> std::io::Result<()> {
             .expect("Invalid Toml in settings.toml");
 
     let manager = ConnectionManager::<PgConnection>::new(config.database_url);
-    let pool = Data::new(Pool::builder()
-        .build(manager)
-        .expect("Failed to create connection pool"));
+    let pool = Data::new(
+        Pool::builder()
+            .build(manager)
+            .expect("Failed to create connection pool"),
+    );
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(8)).start();

@@ -33,8 +33,4 @@ table! {
 
 joinable!(coding_activities -> registered_users (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    coding_activities,
-    friend_relations,
-    registered_users,
-);
+allow_tables_to_appear_in_same_query!(coding_activities, friend_relations, registered_users,);

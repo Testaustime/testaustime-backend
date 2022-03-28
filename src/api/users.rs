@@ -1,13 +1,18 @@
 use actix_web::{
     error::*,
     web::{self, block, Data, Path, Query},
-    Responder, HttpResponse,
-};
-use crate::{
-    database::{get_activity, get_user_by_name, are_friends, self}, error::TimeError, models::RegisteredUser, requests::DataRequest,
-    user::UserId, DbPool,
+    HttpResponse, Responder,
 };
 use serde_derive::Deserialize;
+
+use crate::{
+    database::{self, are_friends, get_activity, get_user_by_name},
+    error::TimeError,
+    models::RegisteredUser,
+    requests::DataRequest,
+    user::UserId,
+    DbPool,
+};
 
 #[derive(Deserialize)]
 pub struct UserAuthentication {
@@ -21,9 +26,15 @@ pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder, TimeErro
 }
 
 #[delete("/users/@me/delete")]
-pub async fn delete_user(pool: Data<DbPool>, user: web::Json<UserAuthentication>) -> Result<impl Responder, TimeError> {
+pub async fn delete_user(
+    pool: Data<DbPool>,
+    user: web::Json<UserAuthentication>,
+) -> Result<impl Responder, TimeError> {
     let clone = pool.clone();
-    if let Some(user) = block(move || database::verify_user_password(&pool.get()?,&user.username, &user.password)).await?? {
+    if let Some(user) =
+        block(move || database::verify_user_password(&pool.get()?, &user.username, &user.password))
+            .await??
+    {
         block(move || database::delete_user(&clone.get()?, user.id)).await??;
     }
     Ok(HttpResponse::Ok().finish())
@@ -50,10 +61,13 @@ pub async fn get_activities(
             match block(move || {
                 let conn = db.get()?;
                 are_friends(&conn, user.id, friend_id)
-            }).await? {
+            })
+            .await?
+            {
                 Ok(b) => {
                     if b {
-                        let data = block(move || get_activity(&conn, data.into_inner(), friend_id)).await??;
+                        let data = block(move || get_activity(&conn, data.into_inner(), friend_id))
+                            .await??;
                         Ok(web::Json(data))
                     } else {
                         Err(TimeError::Unauthorized)

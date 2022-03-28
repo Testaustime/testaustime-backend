@@ -37,8 +37,8 @@ pub fn get_user_by_name(
 
 pub fn delete_user(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
-    userid: i32
-) -> Result<bool,TimeError> {
+    userid: i32,
+) -> Result<bool, TimeError> {
     use crate::schema::registered_users::dsl::*;
     Ok(diesel::delete(registered_users.filter(id.eq(userid))).execute(conn)? > 0)
 }

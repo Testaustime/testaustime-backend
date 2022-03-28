@@ -1,11 +1,16 @@
 use actix_web::{
     error::*,
-    web::{self, Data, block},
+    web::{self, block, Data},
     HttpResponse, Responder,
 };
 use diesel::result::DatabaseErrorKind;
 
-use crate::{database::{self, get_user_by_name, remove_friend}, error::TimeError, user::UserId, DbPool};
+use crate::{
+    database::{self, get_user_by_name, remove_friend},
+    error::TimeError,
+    user::UserId,
+    DbPool,
+};
 
 #[post("/friends/add")]
 pub async fn add_friend(
@@ -13,7 +18,15 @@ pub async fn add_friend(
     body: String,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    match block(move || database::add_friend(&db.get()?, user.id, &body.trim().trim_start_matches("ttfc_"))).await? {
+    match block(move || {
+        database::add_friend(
+            &db.get()?,
+            user.id,
+            &body.trim().trim_start_matches("ttfc_"),
+        )
+    })
+    .await?
+    {
         // This is not correct
         Err(e) => {
             error!("{}", e);
