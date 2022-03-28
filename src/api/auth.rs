@@ -18,7 +18,7 @@ impl FromRequest for UserId {
     type Error = TimeError;
     type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Self::Error>>>>;
 
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let db = Data::extract(req);
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
@@ -51,7 +51,7 @@ impl FromRequest for RegisteredUser {
             if let Some(auth) = auth {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || { 
-                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
+                    let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                     get_user_by_token(&db.get()?, &token) 
                 }).await?;
                 if let Ok(user) = user {
