@@ -107,7 +107,8 @@ pub fn new_user(
     };
     diesel::insert_into(crate::schema::registered_users::table)
         .values(&new_user)
-        .execute(conn)?;
+        .execute(conn)
+        .map_err(|_| TimeError::UserExistsError)?;
     Ok(new_user)
 }
 
