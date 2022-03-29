@@ -74,7 +74,7 @@ impl Handler<ClearRequest> for RateLimiterStorage {
     fn handle(&mut self, _: ClearRequest, _: &mut Context<Self>) {
         let cur_time = Local::now().naive_local();
         self.clients.retain(|_, (_, time)| {
-            cur_time.signed_duration_since(*time) > chrono::Duration::minutes(30)
+            cur_time.signed_duration_since(*time) < chrono::Duration::minutes(30)
         });
     }
 }
@@ -89,13 +89,15 @@ impl Handler<IpRequest> for RateLimiterStorage {
         } else {
             self.event_count += 1;
         };
-        if let Some(&(r, s)) = self.clients.get(&req.ip) {
-            if Local::now().naive_local().signed_duration_since(s) > chrono::Duration::minutes(1) {
-                self.clients.insert(req.ip, (0, Local::now().naive_local()));
-            } else if r as usize > self.maxrpm {
+        if let Some((r, s)) = self.clients.get_mut(&req.ip) {
+            let time = Local::now().naive_local(); 
+            if time.signed_duration_since(*s) > chrono::Duration::minutes(1) {
+                *r = 0;
+                *s = time;
+            } else if *r as usize > self.maxrpm {
                 return Ok(false);
             } else {
-                self.clients.insert(req.ip, (r + 1, s));
+                *r += 1
             }
         } else {
             self.clients.insert(req.ip, (1, Local::now().naive_local()));
