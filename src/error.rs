@@ -11,12 +11,12 @@ pub enum TimeError {
     R2d2Error(#[from] r2d2::Error),
     #[error("Diesel transaction failed `{0}`")]
     DieselError(#[from] diesel::result::Error),
-    #[error(transparent)]
+    #[error("Internal server error")]
     DieselConnectionError(#[from] diesel::result::ConnectionError),
     #[error(transparent)]
     ActixError(#[from] actix_web::error::Error),
     #[error("User exists")]
-    UserExistsError,
+    UserExists,
     #[error("User not found")]
     UserNotFound,
     #[error("You cannot add yourself")]
@@ -39,7 +39,7 @@ impl ResponseError for TimeError {
         match self {
             TimeError::BadId => StatusCode::BAD_REQUEST,
             TimeError::InvalidLength(_) => StatusCode::BAD_REQUEST,
-            TimeError::CurrentUser => StatusCode::CONFLICT,
+            TimeError::CurrentUser | TimeError::UserExists => StatusCode::CONFLICT,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }

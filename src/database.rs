@@ -90,7 +90,7 @@ pub fn new_user(
     password: &str,
 ) -> Result<NewRegisteredUser, TimeError> {
     if user_exists(&conn, username)? {
-        return Err(TimeError::UserExistsError);
+        return Err(TimeError::UserExists);
     }
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -108,7 +108,7 @@ pub fn new_user(
     diesel::insert_into(crate::schema::registered_users::table)
         .values(&new_user)
         .execute(conn)
-        .map_err(|_| TimeError::UserExistsError)?;
+        .map_err(|_| TimeError::UserExists)?;
     Ok(new_user)
 }
 
@@ -118,13 +118,13 @@ pub fn change_username(
     new_username: &str,
 ) -> Result<(), TimeError> {
     if user_exists(&conn, new_username)? {
-        return Err(TimeError::UserExistsError);
+        return Err(TimeError::UserExists);
     }
     use crate::schema::registered_users::dsl::*;
     diesel::update(crate::schema::registered_users::table)
         .filter(id.eq(user))
         .set(username.eq(new_username))
-        .execute(conn)?;
+        .execute(conn).map_err(|_| TimeError::UserExists)?;
     Ok(())
 }
 
