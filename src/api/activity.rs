@@ -24,7 +24,6 @@ pub async fn update(
     db: Data<DbPool>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    let heartbeat = heartbeat;
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 32 {
             return Err(TimeError::InvalidLength(
