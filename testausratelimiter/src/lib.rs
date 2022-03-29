@@ -1,5 +1,3 @@
-#![feature(once_cell)]
-
 use std::{
     collections::HashMap,
     future::{ready, Ready},
@@ -11,68 +9,90 @@ use actix_web::{
     Error,
 };
 use chrono::prelude::*;
-use futures_util::future::LocalBoxFuture;
+use futures_util::{future::LocalBoxFuture, stream::once};
 
-#[derive(Clone)]
 pub struct RateLimiterStorage {
-    pub clients: HashMap<String, (i32, NaiveDateTime)>,
-    pub maxrpm: i32,
+    pub clients: HashMap<String, (i16, NaiveDateTime)>,
+    pub maxrpm: usize,
+    event_count: usize,
 }
 
 pub struct RateLimiter {
     pub storage: Addr<RateLimiterStorage>,
     pub use_peer_addr: bool,
+    pub maxrpm: usize,
 }
 
 pub struct RateLimiterTransform<S> {
     pub service: S,
     pub ratelimiter: Addr<RateLimiterStorage>,
     pub use_peer_addr: bool,
+    pub maxrpm: usize,
 }
 
-struct Request {
+#[derive(Message)]
+#[rtype(result = "usize")]
+struct RpmLimitRequest;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct ClearRequest;
+
+struct IpRequest {
     pub ip: String,
 }
-
-struct LimitRequest;
 
 impl Actor for RateLimiterStorage {
     type Context = Context<Self>;
 }
 
 impl RateLimiterStorage {
-    pub fn new(max: i32) -> Self {
+    pub fn new(max: usize) -> Self {
         RateLimiterStorage {
             clients: HashMap::new(),
             maxrpm: max,
+            event_count: 0,
         }
     }
 }
 
-impl Message for LimitRequest {
-    type Result = i32;
+impl Message for IpRequest {
+    type Result = Result<bool, std::io::Error>;
 }
 
-impl Handler<LimitRequest> for RateLimiterStorage {
-    type Result = i32;
+impl Handler<RpmLimitRequest> for RateLimiterStorage {
+    type Result = usize;
 
-    fn handle(&mut self, _: LimitRequest, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _: RpmLimitRequest, _: &mut Context<Self>) -> Self::Result {
         self.maxrpm
     }
 }
 
-impl Message for Request {
-    type Result = Result<bool, std::io::Error>;
+impl Handler<ClearRequest> for RateLimiterStorage {
+    type Result = ();
+
+    fn handle(&mut self, _: ClearRequest, _: &mut Context<Self>) {
+        let cur_time = Local::now().naive_local();
+        self.clients.retain(|_, (_, time)| {
+            cur_time.signed_duration_since(*time) > chrono::Duration::minutes(30)
+        });
+    }
 }
 
-impl Handler<Request> for RateLimiterStorage {
+impl Handler<IpRequest> for RateLimiterStorage {
     type Result = Result<bool, std::io::Error>;
 
-    fn handle(&mut self, req: Request, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, req: IpRequest, ctx: &mut Context<Self>) -> Self::Result {
+        if self.event_count > 1000 {
+            ctx.add_message_stream(once(async { ClearRequest }));
+            self.event_count = 0;
+        } else {
+            self.event_count += 1;
+        };
         if let Some(&(r, s)) = self.clients.get(&req.ip) {
             if Local::now().naive_local().signed_duration_since(s) > chrono::Duration::minutes(1) {
                 self.clients.insert(req.ip, (0, Local::now().naive_local()));
-            } else if r > self.maxrpm {
+            } else if r as usize > self.maxrpm {
                 return Ok(false);
             } else {
                 self.clients.insert(req.ip, (r + 1, s));
@@ -101,6 +121,7 @@ where
             service,
             ratelimiter: self.storage.clone(),
             use_peer_addr: self.use_peer_addr,
+            maxrpm: self.maxrpm,
         }))
     }
 }
@@ -119,28 +140,32 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let conn_info = req.connection_info().clone();
-        let res = self.ratelimiter.send(Request {
-            ip: if self.use_peer_addr {
-                conn_info.peer_addr().unwrap().to_string()
+        if let Some(ip) = {
+            if self.use_peer_addr {
+                conn_info.peer_addr()
             } else {
-                conn_info.realip_remote_addr().unwrap().to_string()
-            },
-        });
-        let resp = self.service.call(req);
-        let maxrpm_fut = self.ratelimiter.send(LimitRequest);
-        Box::pin(async move {
-            let res = res.await.unwrap().unwrap();
-            if res {
-                // COOL PERSON
-                let resp = resp.await.unwrap();
-                Ok(resp)
-            } else {
-                // UNCOOL PERSON
-                Err(actix_web::error::ErrorTooManyRequests(format!(
-                    "You have sent more than `{}` requests this minute. SLOW DOWN!",
-                    maxrpm_fut.await.unwrap()
-                )))
+                conn_info.realip_remote_addr()
             }
-        })
+        } {
+            let res = self.ratelimiter.send(IpRequest { ip: ip.to_owned() });
+            let resp = self.service.call(req);
+            let maxrpm = self.maxrpm;
+            Box::pin(async move {
+                let res = res
+                    .await
+                    .map_err(|e| actix_web::error::ErrorInternalServerError(e))??;
+                if res {
+                    let resp = resp.await?;
+                    Ok(resp)
+                } else {
+                    Err(actix_web::error::ErrorTooManyRequests(format!(
+                        "You have sent more than `{}` requests this minute.",
+                        maxrpm
+                    )))
+                }
+            })
+        } else {
+            Box::pin(async move { Err(actix_web::error::ErrorInternalServerError("wtf")) })
+        }
     }
 }
