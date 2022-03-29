@@ -32,8 +32,8 @@ extern crate serde_json;
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
     pub ratelimit_by_peer_ip: Option<bool>,
-    pub max_requests_per_min: Option<i32>,
-    pub max_heartbeats_per_min: Option<i32>,
+    pub max_requests_per_min: Option<usize>,
+    pub max_heartbeats_per_min: Option<usize>,
     pub address: String,
     pub database_url: String,
     pub allowed_origin: String,
@@ -82,6 +82,7 @@ async fn main() -> std::io::Result<()> {
                     .wrap(RateLimiter {
                         storage: heartbeat_ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
+                        maxrpm: config.max_requests_per_min.unwrap_or(10),
                     })
                     .service(api::activity::update)
                     .service(api::activity::flush),
@@ -91,6 +92,7 @@ async fn main() -> std::io::Result<()> {
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
+                        maxrpm: config.max_heartbeats_per_min.unwrap_or(30),
                     })
                     .service(api::activity::delete)
                     .service(api::auth::register)
