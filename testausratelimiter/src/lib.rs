@@ -12,7 +12,7 @@ use chrono::prelude::*;
 use futures_util::{future::LocalBoxFuture, stream::once};
 
 pub struct RateLimiterStorage {
-    pub clients: HashMap<String, (i16, NaiveDateTime)>,
+    pub clients: HashMap<String, (u32, NaiveDateTime)>,
     pub maxrpm: usize,
     event_count: usize,
 }
