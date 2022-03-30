@@ -27,28 +27,28 @@ pub async fn update(
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 32 {
             return Err(TimeError::InvalidLength(
-                "Project project is over 32 chars".to_string(),
+                "Project name is over 32 chars".to_string(),
             ));
         }
     }
     if let Some(language) = &heartbeat.language {
         if language.len() > 32 {
             return Err(TimeError::InvalidLength(
-                "Language project is over 32 chars".to_string(),
+                "Language is over 32 chars".to_string(),
             ));
         }
     }
     if let Some(editor) = &heartbeat.editor_name {
         if editor.len() > 32 {
             return Err(TimeError::InvalidLength(
-                "Editor project is over 32 chars".to_string(),
+                "Editor name is over 32 chars".to_string(),
             ));
         }
     }
     if let Some(hostname) = &heartbeat.hostname {
         if hostname.len() > 32 {
             return Err(TimeError::InvalidLength(
-                "Hostname project is over 32 chars".to_string(),
+                "Hostname is over 32 chars".to_string(),
             ));
         }
     }
