@@ -29,6 +29,8 @@ pub enum TimeError {
     InvalidLength(String),
     #[error("Bad id")]
     BadId,
+    #[error("Already friends")]
+    AlreadyFriends,
 }
 
 unsafe impl Send for TimeError {}
@@ -39,7 +41,7 @@ impl ResponseError for TimeError {
         match self {
             TimeError::BadId => StatusCode::BAD_REQUEST,
             TimeError::InvalidLength(_) => StatusCode::BAD_REQUEST,
-            TimeError::CurrentUser | TimeError::UserExists => StatusCode::CONFLICT,
+            TimeError::CurrentUser | TimeError::UserExists | TimeError::AlreadyFriends => StatusCode::CONFLICT,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }

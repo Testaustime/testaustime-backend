@@ -34,7 +34,7 @@ pub async fn add_friend(
                 TimeError::DieselError(diesel::result::Error::DatabaseError(
                     DatabaseErrorKind::UniqueViolation,
                     ..,
-                )) => e,
+                )) => TimeError::AlreadyFriends,
                 _ => e,
             })
         }
