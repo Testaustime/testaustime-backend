@@ -14,6 +14,7 @@ actix = "0.13"
 awc = "3.0.0-beta.21"
 actix-cors = "0.6"
 http = "0.2"
+regex = "1.5"
 
 diesel = { version = "1.4.8", features = ["postgres", "chrono", "r2d2"] }
 r2d2 = "0.8"

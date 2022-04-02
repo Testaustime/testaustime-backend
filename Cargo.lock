@@ -1433,6 +1433,7 @@ dependencies = [
  "log",
  "r2d2",
  "rand",
+ "regex",
  "serde",
  "serde_derive",
  "serde_json",
