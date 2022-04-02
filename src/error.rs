@@ -48,10 +48,8 @@ impl ResponseError for TimeError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        match self {
-            _ => HttpResponse::build(self.status_code())
-                .insert_header(ContentType::json())
-                .body(json!({ "error": format!("{}", self) }).to_string()),
-        }
+        HttpResponse::build(self.status_code())
+            .insert_header(ContentType::json())
+            .body(json!({ "error": format!("{}", self) }).to_string())
     }
 }
