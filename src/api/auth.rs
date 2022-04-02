@@ -31,7 +31,7 @@ impl FromRequest for UserId {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&db.get()?, &token)
+                    get_user_by_token(&db.get()?, token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(UserId { id: user.id })
@@ -39,7 +39,7 @@ impl FromRequest for UserId {
                     Err(TimeError::Unauthorized)
                 }
             } else {
-                return Err(TimeError::Unauthorized);
+                Err(TimeError::Unauthorized)
             }
         })
     }
@@ -57,7 +57,7 @@ impl FromRequest for RegisteredUser {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&db.get()?, &token)
+                    get_user_by_token(&db.get()?, token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(user)
@@ -65,7 +65,7 @@ impl FromRequest for RegisteredUser {
                     Err(TimeError::Unauthorized)
                 }
             } else {
-                return Err(TimeError::Unauthorized);
+                Err(TimeError::Unauthorized)
             }
         })
     }
