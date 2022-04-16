@@ -20,6 +20,24 @@ table! {
 }
 
 table! {
+    leaderboard_members (id) {
+        id -> Int4,
+        leaderboard_id -> Int4,
+        user_id -> Int4,
+        admin -> Bool,
+    }
+}
+
+table! {
+    leaderboards (id) {
+        id -> Int4,
+        name -> Varchar,
+        invite_code -> Varchar,
+        creation_time -> Timestamp,
+    }
+}
+
+table! {
     registered_users (id) {
         id -> Int4,
         auth_token -> Varchar,
@@ -32,5 +50,13 @@ table! {
 }
 
 joinable!(coding_activities -> registered_users (user_id));
+joinable!(leaderboard_members -> leaderboards (leaderboard_id));
+joinable!(leaderboard_members -> registered_users (user_id));
 
-allow_tables_to_appear_in_same_query!(coding_activities, friend_relations, registered_users,);
+allow_tables_to_appear_in_same_query!(
+    coding_activities,
+    friend_relations,
+    leaderboard_members,
+    leaderboards,
+    registered_users,
+);
