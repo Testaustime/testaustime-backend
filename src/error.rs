@@ -21,6 +21,10 @@ pub enum TimeError {
     UserNotFound,
     #[error("You cannot add yourself")]
     CurrentUser,
+    #[error("Leaderboard exists")]
+    LeaderboardExists,
+    #[error("Leaderboard not found")]
+    LeaderboardNotFound,
     #[error("You are not authorized")]
     Unauthorized,
     #[error(transparent)]
@@ -33,6 +37,10 @@ pub enum TimeError {
     BadId,
     #[error("Already friends")]
     AlreadyFriends,
+    #[error("You're already a member")]
+    AlreadyMember,
+    #[error("You're not a member")]
+    NotMember,
 }
 
 unsafe impl Send for TimeError {}
@@ -41,12 +49,16 @@ impl ResponseError for TimeError {
     fn status_code(&self) -> StatusCode {
         error!("{}", self);
         match self {
+            TimeError::UserNotFound | TimeError::LeaderboardNotFound => StatusCode::NOT_FOUND,
             TimeError::BadUsername | TimeError::InvalidLength(_) | TimeError::BadId => {
                 StatusCode::BAD_REQUEST
             }
-            TimeError::CurrentUser | TimeError::UserExists | TimeError::AlreadyFriends => {
-                StatusCode::CONFLICT
-            }
+            TimeError::CurrentUser
+            | TimeError::UserExists
+            | TimeError::AlreadyFriends
+            | TimeError::LeaderboardExists
+            | TimeError::AlreadyMember
+            | TimeError::NotMember => StatusCode::CONFLICT,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
