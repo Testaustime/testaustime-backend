@@ -10,7 +10,7 @@ use crate::{
     database::{add_activity, delete_activity},
     error::TimeError,
     requests::*,
-    user::UserId,
+    models::UserId,
     DbPool,
 };
 

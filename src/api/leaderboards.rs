@@ -5,7 +5,7 @@ use actix_web::{
 };
 use diesel::result::DatabaseErrorKind;
 
-use crate::{database, error::TimeError, user::UserId, DbPool};
+use crate::{database, error::TimeError, models::UserId, DbPool};
 
 // FIXME: Maybe take json as input for POSTs
 

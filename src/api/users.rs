@@ -10,7 +10,7 @@ use crate::{
     error::TimeError,
     models::RegisteredUser,
     requests::DataRequest,
-    user::UserId,
+    models::UserId,
     DbPool,
 };
 

@@ -1,4 +1,9 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
+pub struct UserId {
+    pub id: i32,
+}
 
 #[derive(Queryable, Clone, Debug, Serialize)]
 pub struct RegisteredUser {

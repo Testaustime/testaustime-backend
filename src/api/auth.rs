@@ -16,7 +16,7 @@ use crate::{
     error::TimeError,
     models::{RegisteredUser, SelfUser},
     requests::*,
-    user::UserId,
+    models::UserId,
     DbPool,
 };
 

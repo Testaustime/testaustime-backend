@@ -6,7 +6,6 @@ mod error;
 pub mod models;
 mod requests;
 pub mod schema;
-mod user;
 mod utils;
 
 use actix::prelude::*;
