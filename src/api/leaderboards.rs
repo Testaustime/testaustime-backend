@@ -1,21 +1,37 @@
 use actix_web::{
     error::*,
-    web::{self, block, Data, Path},
+    web::{self, block, Data, Json, Path},
     HttpResponse, Responder,
 };
 use diesel::result::DatabaseErrorKind;
+use serde::Deserialize;
 
 use crate::{database, error::TimeError, models::UserId, DbPool};
 
 // FIXME: Maybe take json as input for POSTs
 
+#[derive(Deserialize)]
+pub struct LeaderboardName {
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardInvite {
+    pub invite: String,
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardUser {
+    pub user: String,
+}
+
 #[post("/leaderboards")]
 pub async fn create_leaderboard(
     creator: UserId,
-    body: String,
+    body: Json<LeaderboardName>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    match block(move || database::new_leaderboard(&db.get()?, creator.id, &body)).await? {
+    match block(move || database::new_leaderboard(&db.get()?, creator.id, &body.name)).await? {
         Ok(code) => Ok(web::Json(json!({
             "invite_code": format!("ttlic_{}", code)
         }))),
@@ -84,14 +100,14 @@ pub async fn delete_leaderboard(
 #[post("/leaderboards/join")]
 pub async fn join_leaderboard(
     user: UserId,
-    body: String,
+    body: Json<LeaderboardInvite>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     match block(move || {
         database::add_user_to_leaderboard(
             &db.get()?,
             user.id,
-            body.trim().trim_start_matches("ttlic_"),
+            body.invite.trim().trim_start_matches("ttlic_"),
         )
     })
     .await?
@@ -136,14 +152,16 @@ pub async fn promote_member(
     user: UserId,
     path: Path<(String,)>,
     db: Data<DbPool>,
-    body: String,
+    promotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
         let conn = db.get()?;
         if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
             let conn = db.get()?;
-            if let Ok(newadmin) = block(move || database::get_user_by_name(&conn, &body)).await? {
+            if let Ok(newadmin) =
+                block(move || database::get_user_by_name(&conn, &promotion.user)).await?
+            {
                 let conn = db.get()?;
                 if block(move || {
                     database::promote_user_to_leaderboard_admin(&conn, lid, newadmin.id)
@@ -174,14 +192,16 @@ pub async fn demote_member(
     user: UserId,
     path: Path<(String,)>,
     db: Data<DbPool>,
-    body: String,
+    demotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
         let conn = db.get()?;
         if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
             let conn = db.get()?;
-            if let Ok(oldadmin) = block(move || database::get_user_by_name(&conn, &body)).await? {
+            if let Ok(oldadmin) =
+                block(move || database::get_user_by_name(&conn, &demotion.user)).await?
+            {
                 let conn = db.get()?;
                 if block(move || {
                     database::demote_user_to_leaderboard_member(&conn, lid, oldadmin.id)
@@ -212,14 +232,16 @@ pub async fn kick_member(
     user: UserId,
     path: Path<(String,)>,
     db: Data<DbPool>,
-    body: String,
+    kick: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
         let conn = db.get()?;
         if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
             let conn = db.get()?;
-            if let Ok(kmember) = block(move || database::get_user_by_name(&conn, &body)).await? {
+            if let Ok(kmember) =
+                block(move || database::get_user_by_name(&conn, &kick.user)).await?
+            {
                 let conn = db.get()?;
                 if block(move || database::remove_user_from_leaderboard(&conn, lid, kmember.id))
                     .await??
