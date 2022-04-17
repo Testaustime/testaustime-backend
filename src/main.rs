@@ -106,7 +106,16 @@ async fn main() -> std::io::Result<()> {
                     .service(api::friends::remove)
                     .service(api::users::my_profile)
                     .service(api::users::get_activities)
-                    .service(api::users::delete_user),
+                    .service(api::users::delete_user)
+                    .service(api::leaderboards::create_leaderboard)
+                    .service(api::leaderboards::get_leaderboard)
+                    .service(api::leaderboards::join_leaderboard)
+                    .service(api::leaderboards::leave_leaderboard)
+                    .service(api::leaderboards::delete_leaderboard)
+                    .service(api::leaderboards::promote_member)
+                    .service(api::leaderboards::demote_member)
+                    .service(api::leaderboards::kick_member)
+                    .service(api::leaderboards::regenerate_invite),
             )
             .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store))

@@ -93,3 +93,54 @@ pub struct NewCodingActivity {
     pub editor_name: Option<String>,
     pub hostname: Option<String>,
 }
+
+#[derive(Queryable, Clone, Debug, Serialize)]
+pub struct Leaderboard {
+    pub id: i32,
+    pub name: String,
+    pub invite_code: String,
+    pub creation_time: chrono::NaiveDateTime,
+}
+
+use crate::schema::leaderboards;
+
+#[derive(Insertable)]
+#[table_name = "leaderboards"]
+pub struct NewLeaderboard {
+    pub name: String,
+    pub invite_code: String,
+    pub creation_time: chrono::NaiveDateTime,
+}
+
+#[derive(Queryable, Clone, Debug)]
+pub struct LeaderboardMember {
+    pub id: i32,
+    pub leaderboard_id: i32,
+    pub user_id: i32,
+    pub admin: bool,
+}
+
+use crate::schema::leaderboard_members;
+
+#[derive(Insertable)]
+#[table_name = "leaderboard_members"]
+pub struct NewLeaderboardMember {
+    pub leaderboard_id: i32,
+    pub user_id: i32,
+    pub admin: bool,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PrivateLeaderboardMember {
+    pub username: String,
+    pub admin: bool,
+    pub time_coded: i32,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PrivateLeaderboard {
+    pub name: String,
+    pub invite: String,
+    pub creation_time: chrono::NaiveDateTime,
+    pub members: Vec<PrivateLeaderboardMember>,
+}

@@ -124,7 +124,8 @@ pub fn change_username(
     diesel::update(crate::schema::registered_users::table)
         .filter(id.eq(user))
         .set(username.eq(new_username))
-        .execute(conn).map_err(|_| TimeError::UserExists)?;
+        .execute(conn)
+        .map_err(|_| TimeError::UserExists)?;
     Ok(())
 }
 
@@ -229,12 +230,12 @@ pub fn add_friend(
 ) -> Result<String, TimeError> {
     use crate::schema::registered_users::dsl::*;
     let Some((friend_id, friend_name)) = registered_users
-        .filter(friend_code.eq(friend))
-        .select((id,username))
-        .first::<(i32,String)>(conn)
-        .optional()? else {
-            return Err(TimeError::UserNotFound)
-        };
+    .filter(friend_code.eq(friend))
+    .select((id,username))
+    .first::<(i32,String)>(conn)
+    .optional()? else {
+        return Err(TimeError::UserNotFound)
+    };
 
     if friend_id == user {
         return Err(TimeError::CurrentUser);
@@ -352,4 +353,209 @@ pub fn delete_activity(
         .filter(user_id.eq(userid))
         .execute(conn)?;
     Ok(res != 0)
+}
+
+pub fn new_leaderboard(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    creator_id: i32,
+    name: &str,
+) -> Result<String, TimeError> {
+    let code = crate::utils::generate_token();
+    let board = NewLeaderboard {
+        name: name.to_string(),
+        creation_time: chrono::Local::now().naive_local(),
+        invite_code: code.clone(),
+    };
+    let lid = {
+        use crate::schema::leaderboards::dsl::*;
+        insert_into(crate::schema::leaderboards::table)
+            .values(&board)
+            .returning(id)
+            .get_results(conn)?[0]
+    };
+
+    let admin = NewLeaderboardMember {
+        user_id: creator_id,
+        admin: true,
+        leaderboard_id: lid,
+    };
+    insert_into(crate::schema::leaderboard_members::table)
+        .values(&admin)
+        .execute(conn)?;
+    Ok(code)
+}
+
+pub fn regenerate_leaderboard_invite(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+) -> Result<String, TimeError> {
+    let newinvite = crate::utils::generate_token();
+    use crate::schema::leaderboards::dsl::*;
+    diesel::update(crate::schema::leaderboards::table)
+        .filter(id.eq(lid))
+        .set(invite_code.eq(&newinvite))
+        .execute(conn)?;
+    Ok(newinvite)
+}
+
+pub fn delete_leaderboard(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lname: &str,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboards::dsl::*;
+    let res = diesel::delete(crate::schema::leaderboards::table)
+        .filter(name.eq(lname))
+        .execute(conn)?;
+    Ok(res != 0)
+}
+
+pub fn get_leaderboard_id_by_name(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lname: &str,
+) -> Result<i32, TimeError> {
+    use crate::schema::leaderboards::dsl::*;
+    Ok(leaderboards
+        .filter(name.eq(lname))
+        .select(id)
+        .first::<i32>(conn)?)
+}
+
+pub fn get_leaderboard(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lname: &str,
+) -> Result<PrivateLeaderboard, TimeError> {
+    let board = {
+        use crate::schema::leaderboards::dsl::*;
+        leaderboards
+            .filter(name.eq(lname))
+            .first::<Leaderboard>(conn)?
+    };
+    let members = {
+        use crate::schema::leaderboard_members::dsl::*;
+        leaderboard_members
+            .filter(leaderboard_id.eq(board.id))
+            .load::<LeaderboardMember>(conn)?
+    };
+    let mut fullmembers = Vec::new();
+    let aweekago = NaiveDateTime::new(
+        chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
+        chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
+    );
+    for m in members {
+        if let Ok(user) = get_user_by_id(conn, m.user_id) {
+            fullmembers.push(PrivateLeaderboardMember {
+                username: user.username,
+                admin: m.admin,
+                time_coded: get_user_coding_time_since(conn, m.user_id, aweekago).unwrap_or(0),
+            });
+        }
+    }
+    Ok(PrivateLeaderboard {
+        name: board.name,
+        invite: format!("ttlic_{}", board.invite_code),
+        creation_time: board.creation_time,
+        members: fullmembers,
+    })
+}
+
+pub fn add_user_to_leaderboard(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+    invite: &str,
+) -> Result<String, TimeError> {
+    let (lid, name) = {
+        use crate::schema::leaderboards::dsl::*;
+        leaderboards
+            .filter(invite_code.eq(invite))
+            .select((id, name))
+            .first::<(i32, String)>(conn)?
+    };
+    let user = NewLeaderboardMember {
+        user_id: uid,
+        leaderboard_id: lid,
+        admin: false,
+    };
+    insert_into(crate::schema::leaderboard_members::table)
+        .values(&user)
+        .execute(conn)?;
+    Ok(name)
+}
+
+pub fn remove_user_from_leaderboard(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+    uid: i32,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    let res = diesel::delete(crate::schema::leaderboard_members::table)
+        .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+        .execute(conn)?;
+    Ok(res != 0)
+}
+
+pub fn promote_user_to_leaderboard_admin(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+    uid: i32,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    let res = diesel::update(crate::schema::leaderboard_members::table)
+        .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+        .set(admin.eq(true))
+        .execute(conn)?;
+    Ok(res != 0)
+}
+
+pub fn demote_user_to_leaderboard_member(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+    uid: i32,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    let res = diesel::update(crate::schema::leaderboard_members::table)
+        .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+        .set(admin.eq(false))
+        .execute(conn)?;
+    Ok(res != 0)
+}
+
+pub fn is_leaderboard_member(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+    lid: i32,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    Ok(leaderboard_members
+        .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+        .select(id)
+        .first::<i32>(conn)
+        .optional()?
+        .is_some())
+}
+
+pub fn get_user_coding_time_since(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+    since: chrono::NaiveDateTime,
+) -> Result<i32, TimeError> {
+    use crate::schema::coding_activities::dsl::*;
+    Ok(coding_activities
+        .filter(user_id.eq(uid).and(start_time.ge(since)))
+        .select(diesel::dsl::sum(duration))
+        .first::<Option<i64>>(conn)?
+        .unwrap_or(0) as i32)
+}
+
+pub fn is_leaderboard_admin(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+    lid: i32,
+) -> Result<bool, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    Ok(leaderboard_members
+        .filter(leaderboard_id.eq(lid).and(user_id.eq(uid)))
+        .select(admin)
+        .first::<bool>(conn)
+        .optional()?
+        .unwrap_or(false))
 }
