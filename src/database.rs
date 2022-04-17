@@ -385,28 +385,28 @@ pub fn new_leaderboard(
     Ok(code)
 }
 
+pub fn regenerate_leaderboard_invite(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+) -> Result<String, TimeError> {
+    let newinvite = crate::utils::generate_token();
+    use crate::schema::leaderboards::dsl::*;
+    diesel::update(crate::schema::leaderboards::table)
+        .filter(id.eq(lid))
+        .set(invite_code.eq(&newinvite))
+        .execute(conn)?;
+    Ok(newinvite)
+}
+
 pub fn delete_leaderboard(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
-    lname: String,
+    lname: &str,
 ) -> Result<bool, TimeError> {
     use crate::schema::leaderboards::dsl::*;
     let res = diesel::delete(crate::schema::leaderboards::table)
         .filter(name.eq(lname))
         .execute(conn)?;
     Ok(res != 0)
-}
-
-#[derive(serde::Serialize, Clone, Debug)]
-pub struct PrivateLeaderboardMember {
-    username: String,
-    admin: bool,
-    time_coded: i32,
-}
-
-#[derive(serde::Serialize, Clone, Debug)]
-pub struct PrivateLeaderboard {
-    name: String,
-    members: Vec<PrivateLeaderboardMember>,
 }
 
 pub fn get_leaderboard_id_by_name(
@@ -452,6 +452,8 @@ pub fn get_leaderboard(
     }
     Ok(PrivateLeaderboard {
         name: board.name,
+        invite: format!("ttlic_{}", board.invite_code),
+        creation_time: board.creation_time,
         members: fullmembers,
     })
 }
@@ -517,20 +519,7 @@ pub fn demote_user_to_leaderboard_member(
     Ok(res != 0)
 }
 
-pub fn is_leaderboard_member_by_lname(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
-    uid: i32,
-    lname: &str,
-) -> Result<bool, TimeError> {
-    use crate::schema::leaderboards::dsl::*;
-    let lid = leaderboards
-        .filter(name.eq(lname))
-        .select(id)
-        .first::<i32>(conn)?;
-    is_leaderboard_member_by_lid(conn, uid, lid)
-}
-
-pub fn is_leaderboard_member_by_lid(
+pub fn is_leaderboard_member(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     lid: i32,
@@ -557,20 +546,7 @@ pub fn get_user_coding_time_since(
         .unwrap_or(0) as i32)
 }
 
-pub fn is_leaderboard_admin_by_lname(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
-    uid: i32,
-    lname: &str,
-) -> Result<bool, TimeError> {
-    use crate::schema::leaderboards::dsl::*;
-    let lid = leaderboards
-        .filter(name.eq(lname))
-        .select(id)
-        .first::<i32>(conn)?;
-    is_leaderboard_admin_by_lid(conn, uid, lid)
-}
-
-pub fn is_leaderboard_admin_by_lid(
+pub fn is_leaderboard_admin(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     lid: i32,

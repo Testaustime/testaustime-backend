@@ -129,3 +129,18 @@ pub struct NewLeaderboardMember {
     pub user_id: i32,
     pub admin: bool,
 }
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PrivateLeaderboardMember {
+    pub username: String,
+    pub admin: bool,
+    pub time_coded: i32,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PrivateLeaderboard {
+    pub name: String,
+    pub invite: String,
+    pub creation_time: chrono::NaiveDateTime,
+    pub members: Vec<PrivateLeaderboardMember>,
+}
