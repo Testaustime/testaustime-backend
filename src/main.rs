@@ -107,6 +107,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::users::my_profile)
                     .service(api::users::get_activities)
                     .service(api::users::delete_user)
+                    .service(api::users::my_leaderboards)
                     .service(api::leaderboards::create_leaderboard)
                     .service(api::leaderboards::get_leaderboard)
                     .service(api::leaderboards::join_leaderboard)

@@ -559,3 +559,47 @@ pub fn is_leaderboard_admin(
         .optional()?
         .unwrap_or(false))
 }
+
+pub fn get_user_leaderboards(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+) -> Result<Vec<crate::api::users::ListLeaderboard>, TimeError> {
+    let ids = {
+        use crate::schema::leaderboard_members::dsl::*;
+        leaderboard_members
+            .filter(user_id.eq(uid))
+            .select(leaderboard_id)
+            .order_by(leaderboard_id.asc())
+            .load::<i32>(conn)?
+    };
+    let (names, memcount) = {
+        let n = {
+            use crate::schema::leaderboards::dsl::*;
+            leaderboards
+                .filter(id.eq_any(&ids))
+                .order_by(id.asc())
+                .select(name)
+                .load::<String>(conn)?
+        };
+        let mut c = Vec::new();
+        // FIXME: Do this in the query
+        for i in ids {
+            c.push({
+                use crate::schema::leaderboard_members::dsl::*;
+                leaderboard_members
+                    .filter(leaderboard_id.eq(i))
+                    .select(diesel::dsl::count(user_id))
+                    .first::<i64>(conn)? as i32
+            })
+        }
+        (n, c)
+    };
+    let mut ret = Vec::new();
+    for (n, c) in names.iter().zip(memcount) {
+        ret.push(crate::api::users::ListLeaderboard {
+            name: n.to_string(),
+            member_count: c,
+        });
+    }
+    Ok(ret)
+}

@@ -22,7 +22,20 @@ pub struct UserAuthentication {
 
 #[get("/users/@me")]
 pub async fn my_profile(user: RegisteredUser) -> Result<impl Responder, TimeError> {
-    return Ok(web::Json(user));
+    Ok(web::Json(user))
+}
+
+#[derive(serde::Serialize)]
+pub struct ListLeaderboard {
+    pub name: String,
+    pub member_count: i32,
+}
+
+#[get("/users/@me/leaderboards")]
+pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+    Ok(web::Json(
+        block(move || database::get_user_leaderboards(&db.get()?, user.id)).await??,
+    ))
 }
 
 #[delete("/users/@me/delete")]
