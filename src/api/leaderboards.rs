@@ -25,7 +25,7 @@ pub struct LeaderboardUser {
     pub user: String,
 }
 
-#[post("/leaderboards")]
+#[post("/leaderboards/create")]
 pub async fn create_leaderboard(
     creator: UserId,
     body: Json<LeaderboardName>,
