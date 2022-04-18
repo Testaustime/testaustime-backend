@@ -8,8 +8,6 @@ use serde::Deserialize;
 
 use crate::{database, error::TimeError, models::UserId, DbPool};
 
-// FIXME: Maybe take json as input for POSTs
-
 #[derive(Deserialize)]
 pub struct LeaderboardName {
     pub name: String,
