@@ -30,9 +30,7 @@ pub async fn create_leaderboard(
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     match block(move || database::new_leaderboard(&db.get()?, creator.id, &body.name)).await? {
-        Ok(code) => Ok(web::Json(json!({
-            "invite_code": format!("ttlic_{}", code)
-        }))),
+        Ok(code) => Ok(web::Json(json!({ "invite_code": code }))),
         Err(e) => {
             error!("{}", e);
             Err(match e {
@@ -274,9 +272,7 @@ pub async fn regenerate_invite(
         if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
             let conn = db.get()?;
             let code = block(move || database::regenerate_leaderboard_invite(&conn, lid)).await??;
-            Ok(web::Json(json!({
-                "invite_code": format!("ttlic_{}", code)
-            })))
+            Ok(web::Json(json!({ "invite_code": code })))
         } else {
             error!("{}", TimeError::Unauthorized);
             Err(TimeError::Unauthorized)
