@@ -9,8 +9,8 @@ use dashmap::DashMap;
 use crate::{
     database::{add_activity, delete_activity},
     error::TimeError,
-    requests::*,
     models::UserId,
+    requests::*,
     DbPool,
 };
 

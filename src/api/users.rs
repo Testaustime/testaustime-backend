@@ -8,9 +8,8 @@ use serde_derive::Deserialize;
 use crate::{
     database::{self, are_friends, get_activity, get_user_by_name},
     error::TimeError,
-    models::RegisteredUser,
+    models::{RegisteredUser, UserId},
     requests::DataRequest,
-    models::UserId,
     DbPool,
 };
 
