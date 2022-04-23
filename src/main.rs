@@ -57,9 +57,9 @@ async fn main() -> std::io::Result<()> {
     );
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
-    let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(8)).start();
+    let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(30)).start();
     let heartbeat_ratelimiter =
-        RateLimiterStorage::new(config.max_heartbeats_per_min.unwrap_or(30)).start();
+        RateLimiterStorage::new(config.max_heartbeats_per_min.unwrap_or(8)).start();
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(&config.allowed_origin)
