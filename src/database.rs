@@ -286,7 +286,7 @@ pub fn get_friends(
                 registered_users
                     .filter(id.eq(cur_friend))
                     .first::<RegisteredUser>(conn)
-                    .ok()?
+                    .ok()?,
             )
         })
         .collect();

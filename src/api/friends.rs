@@ -8,7 +8,7 @@ use diesel::result::DatabaseErrorKind;
 use crate::{
     database::{self, get_user_by_name, remove_friend},
     error::TimeError,
-    models::{FriendWithTime, FriendTimeSteps, UserId},
+    models::{FriendTimeSteps, FriendWithTime, UserId},
     DbPool,
 };
 
@@ -47,28 +47,44 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
     let conn = db.get()?;
     match block(move || database::get_friends(&conn, user.id)).await? {
         Ok(friends) => {
-            let friends_with_time: Vec<FriendWithTime> = friends.iter().map(|friend| {
-                FriendWithTime {
+            let friends_with_time: Vec<FriendWithTime> = friends
+                .iter()
+                .map(|friend| FriendWithTime {
                     username: friend.username.clone(),
                     coding_time: FriendTimeSteps {
                         all_time: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(c, friend.id, chrono::NaiveDateTime::from_timestamp(0, 0)).unwrap_or(0),
-                            _ => 0
+                            Ok(c) => database::get_user_coding_time_since(
+                                c,
+                                friend.id,
+                                chrono::NaiveDateTime::from_timestamp(0, 0),
+                            )
+                            .unwrap_or(0),
+                            _ => 0,
                         },
                         past_month: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(c, friend.id, chrono::Local::now().naive_local() - chrono::Duration::days(30)).unwrap_or(0),
-                            _ => 0
+                            Ok(c) => database::get_user_coding_time_since(
+                                c,
+                                friend.id,
+                                chrono::Local::now().naive_local() - chrono::Duration::days(30),
+                            )
+                            .unwrap_or(0),
+                            _ => 0,
                         },
                         past_week: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(c, friend.id, chrono::Local::now().naive_local() - chrono::Duration::days(7)).unwrap_or(0),
-                            _ => 0
+                            Ok(c) => database::get_user_coding_time_since(
+                                c,
+                                friend.id,
+                                chrono::Local::now().naive_local() - chrono::Duration::days(7),
+                            )
+                            .unwrap_or(0),
+                            _ => 0,
                         },
-                    }
-                }
-            }).collect();
+                    },
+                })
+                .collect();
 
             Ok(web::Json(friends_with_time))
-        },
+        }
         Err(e) => {
             error!("{}", e);
             Err(e)
