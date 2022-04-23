@@ -6,9 +6,9 @@ use actix_web::{
 use diesel::result::DatabaseErrorKind;
 
 use crate::{
-    database::{self, get_user_by_name, remove_friend},
+    database::{self, get_coding_time_steps, get_user_by_name, remove_friend},
     error::TimeError,
-    models::{FriendTimeSteps, FriendWithTime, UserId},
+    models::{CodingTimeSteps, FriendWithTime, UserId},
     DbPool,
 };
 
@@ -18,12 +18,9 @@ pub async fn add_friend(
     body: String,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
+    let conn = db.get()?;
     match block(move || {
-        database::add_friend(
-            &db.get()?,
-            user.id,
-            &body.trim().trim_start_matches("ttfc_"),
-        )
+        database::add_friend(&conn, user.id, &body.trim().trim_start_matches("ttfc_"))
     })
     .await?
     {
@@ -38,7 +35,21 @@ pub async fn add_friend(
                 _ => e,
             })
         }
-        Ok(name) => Ok(web::Json(json!({ "name": name }))),
+        Ok(friend) => {
+            let friend_with_time = FriendWithTime {
+                username: friend.username.clone(),
+                coding_time: match &db.get() {
+                    Ok(c) => get_coding_time_steps(c, friend.id),
+                    _ => CodingTimeSteps {
+                        all_time: 0,
+                        past_month: 0,
+                        past_week: 0,
+                    },
+                },
+            };
+
+            Ok(web::Json(friend_with_time))
+        }
     }
 }
 
@@ -51,33 +62,12 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
                 .iter()
                 .map(|friend| FriendWithTime {
                     username: friend.username.clone(),
-                    coding_time: FriendTimeSteps {
-                        all_time: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(
-                                c,
-                                friend.id,
-                                chrono::NaiveDateTime::from_timestamp(0, 0),
-                            )
-                            .unwrap_or(0),
-                            _ => 0,
-                        },
-                        past_month: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(
-                                c,
-                                friend.id,
-                                chrono::Local::now().naive_local() - chrono::Duration::days(30),
-                            )
-                            .unwrap_or(0),
-                            _ => 0,
-                        },
-                        past_week: match &db.get() {
-                            Ok(c) => database::get_user_coding_time_since(
-                                c,
-                                friend.id,
-                                chrono::Local::now().naive_local() - chrono::Duration::days(7),
-                            )
-                            .unwrap_or(0),
-                            _ => 0,
+                    coding_time: match &db.get() {
+                        Ok(c) => get_coding_time_steps(c, friend.id),
+                        _ => CodingTimeSteps {
+                            all_time: 0,
+                            past_month: 0,
+                            past_week: 0,
                         },
                     },
                 })

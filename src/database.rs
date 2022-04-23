@@ -227,15 +227,16 @@ pub fn add_friend(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     friend: &str,
-) -> Result<String, TimeError> {
+) -> Result<RegisteredUser, TimeError> {
     use crate::schema::registered_users::dsl::*;
-    let Some((friend_id, friend_name)) = registered_users
+    let Some(friend) = registered_users
     .filter(friend_code.eq(friend))
-    .select((id,username))
-    .first::<(i32,String)>(conn)
+    .first::<RegisteredUser>(conn)
     .optional()? else {
         return Err(TimeError::UserNotFound)
     };
+
+    let friend_id = friend.id;
 
     if friend_id == user {
         return Err(TimeError::CurrentUser);
@@ -253,7 +254,7 @@ pub fn add_friend(
             greater_id: greater,
         })
         .execute(conn)?;
-    Ok(friend_name)
+    Ok(friend)
 }
 
 pub fn get_friends(
@@ -601,4 +602,30 @@ pub fn get_user_leaderboards(
         });
     }
     Ok(ret)
+}
+
+pub fn get_coding_time_steps(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+) -> CodingTimeSteps {
+    return CodingTimeSteps {
+        all_time: get_user_coding_time_since(
+            conn,
+            uid,
+            chrono::NaiveDateTime::from_timestamp(0, 0),
+        )
+        .unwrap_or(0),
+        past_month: get_user_coding_time_since(
+            conn,
+            uid,
+            chrono::Local::now().naive_local() - chrono::Duration::days(30),
+        )
+        .unwrap_or(0),
+        past_week: get_user_coding_time_since(
+            conn,
+            uid,
+            chrono::Local::now().naive_local() - chrono::Duration::days(7),
+        )
+        .unwrap_or(0),
+    };
 }

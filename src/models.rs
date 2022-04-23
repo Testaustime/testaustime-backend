@@ -151,7 +151,7 @@ pub struct PrivateLeaderboard {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct FriendTimeSteps {
+pub struct CodingTimeSteps {
     pub all_time: i32,
     pub past_month: i32,
     pub past_week: i32,
@@ -160,5 +160,5 @@ pub struct FriendTimeSteps {
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct FriendWithTime {
     pub username: String,
-    pub coding_time: FriendTimeSteps,
+    pub coding_time: CodingTimeSteps,
 }
