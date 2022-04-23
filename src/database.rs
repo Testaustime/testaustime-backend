@@ -259,7 +259,7 @@ pub fn add_friend(
 pub fn get_friends(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
-) -> Result<Vec<String>, TimeError> {
+) -> Result<Vec<RegisteredUser>, TimeError> {
     use crate::schema::{
         friend_relations::dsl::{friend_relations, greater_id, lesser_id},
         registered_users::dsl::*,
@@ -287,7 +287,6 @@ pub fn get_friends(
                     .filter(id.eq(cur_friend))
                     .first::<RegisteredUser>(conn)
                     .ok()?
-                    .username,
             )
         })
         .collect();
