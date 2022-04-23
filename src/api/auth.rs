@@ -14,9 +14,8 @@ use crate::{
         regenerate_token, verify_user_password,
     },
     error::TimeError,
-    models::{RegisteredUser, SelfUser},
+    models::{RegisteredUser, SelfUser, UserId},
     requests::*,
-    models::UserId,
     DbPool,
 };
 

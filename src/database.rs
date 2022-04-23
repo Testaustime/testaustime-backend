@@ -451,7 +451,7 @@ pub fn get_leaderboard(
     }
     Ok(PrivateLeaderboard {
         name: board.name,
-        invite: format!("ttlic_{}", board.invite_code),
+        invite: board.invite_code,
         creation_time: board.creation_time,
         members: fullmembers,
     })
