@@ -7,9 +7,8 @@ use diesel::result::DatabaseErrorKind;
 
 use crate::{
     database::{self, get_user_by_name, remove_friend},
-    models::{FriendWithTime, FriendTimeSteps},
     error::TimeError,
-    models::UserId,
+    models::{FriendWithTime, FriendTimeSteps, UserId},
     DbPool,
 };
 
