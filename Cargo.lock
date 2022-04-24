@@ -1409,7 +1409,6 @@ version = "0.1.0"
 dependencies = [
  "actix",
  "actix-web",
- "chrono",
  "futures-util",
  "log",
 ]
