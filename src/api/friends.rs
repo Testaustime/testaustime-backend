@@ -1,16 +1,15 @@
-use actix_web::{
-    error::*,
-    web::{self, block, Data},
-    HttpResponse, Responder,
-};
-use diesel::result::DatabaseErrorKind;
-
 use crate::{
     database::{self, get_coding_time_steps, get_user_by_name, remove_friend},
     error::TimeError,
     models::{CodingTimeSteps, FriendWithTime, UserId},
     DbPool,
 };
+use actix_web::{
+    error::*,
+    web::{self, block, Data},
+    HttpResponse, Responder,
+};
+use diesel::result::DatabaseErrorKind;
 
 #[post("/friends/add")]
 pub async fn add_friend(
@@ -36,10 +35,11 @@ pub async fn add_friend(
             })
         }
         Ok(friend) => {
+            let conn = db.get()?;
             let friend_with_time = FriendWithTime {
                 username: friend.username.clone(),
-                coding_time: match &db.get() {
-                    Ok(c) => get_coding_time_steps(c, friend.id),
+                coding_time: match block(move || get_coding_time_steps(&conn, friend.id)).await {
+                    Ok(coding_time_steps) => coding_time_steps,
                     _ => CodingTimeSteps {
                         all_time: 0,
                         past_month: 0,
@@ -58,21 +58,24 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
     let conn = db.get()?;
     match block(move || database::get_friends(&conn, user.id)).await? {
         Ok(friends) => {
-            let friends_with_time: Vec<FriendWithTime> = friends
-                .iter()
-                .map(|friend| FriendWithTime {
+            let friends_with_time = futures::future::join_all(friends.iter().map(|friend| async {
+                let conn2 = db.get().unwrap();
+                let friend_id = friend.id;
+
+                return FriendWithTime {
                     username: friend.username.clone(),
-                    coding_time: match &db.get() {
-                        Ok(c) => get_coding_time_steps(c, friend.id),
+                    coding_time: match block(move || get_coding_time_steps(&conn2, friend_id)).await
+                    {
+                        Ok(coding_time_steps) => coding_time_steps,
                         _ => CodingTimeSteps {
                             all_time: 0,
                             past_month: 0,
                             past_week: 0,
                         },
                     },
-                })
-                .collect();
-
+                };
+            }))
+            .await;
             Ok(web::Json(friends_with_time))
         }
         Err(e) => {
