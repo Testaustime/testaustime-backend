@@ -1,4 +1,4 @@
 # Testaustime-backend
 
 ## Contributing
-read `docs/CONTRIBUTING.md`
+Read our [contributing guidelines](docs/CONTRIBUTING.md)
