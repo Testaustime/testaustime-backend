@@ -19,11 +19,7 @@ pub async fn add_friend(
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     match block(move || {
-        database::add_friend(
-            &db.get()?,
-            user.id,
-            &body.trim().trim_start_matches("ttfc_"),
-        )
+        database::add_friend(&db.get()?, user.id, body.trim().trim_start_matches("ttfc_"))
     })
     .await?
     {
