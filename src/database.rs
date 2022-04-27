@@ -58,9 +58,9 @@ pub fn verify_user_password(
     username: &str,
     password: &str,
 ) -> Result<Option<RegisteredUser>, TimeError> {
-    let user = get_user_by_name(&conn, username)?;
+    let user = get_user_by_name(conn, username)?;
     let argon2 = Argon2::default();
-    let Ok(salt) = SaltString::new(&std::str::from_utf8(&user.salt).unwrap()) else {
+    let Ok(salt) = SaltString::new(std::str::from_utf8(&user.salt).unwrap()) else {
         return Ok(None); // The user has no password
     };
     let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
@@ -89,7 +89,7 @@ pub fn new_user(
     username: &str,
     password: &str,
 ) -> Result<NewRegisteredUser, TimeError> {
-    if user_exists(&conn, username)? {
+    if user_exists(conn, username)? {
         return Err(TimeError::UserExists);
     }
     let salt = SaltString::generate(&mut OsRng);
@@ -117,7 +117,7 @@ pub fn change_username(
     user: i32,
     new_username: &str,
 ) -> Result<(), TimeError> {
-    if user_exists(&conn, new_username)? {
+    if user_exists(conn, new_username)? {
         return Err(TimeError::UserExists);
     }
     use crate::schema::registered_users::dsl::*;
@@ -282,12 +282,10 @@ pub fn get_friends(
             },
         )
         .filter_map(|cur_friend| {
-            Some(
-                registered_users
-                    .filter(id.eq(cur_friend))
-                    .first::<RegisteredUser>(conn)
-                    .ok()?,
-            )
+            registered_users
+                .filter(id.eq(cur_friend))
+                .first::<RegisteredUser>(conn)
+                .ok()
         })
         .collect();
     Ok(friends)
