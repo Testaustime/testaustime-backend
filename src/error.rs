@@ -33,6 +33,8 @@ pub enum TimeError {
     InvalidLength(String),
     #[error("Username has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
     BadUsername,
+    #[error("Leaderboard name has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
+    BadLeaderboardName,
     #[error("Bad id")]
     BadId,
     #[error("Already friends")]
