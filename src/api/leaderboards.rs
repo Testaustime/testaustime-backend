@@ -29,6 +29,9 @@ pub async fn create_leaderboard(
     body: Json<LeaderboardName>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
+    if !super::VALID_NAME_REGEX.is_match(&body.name) {
+        return Err(TimeError::BadLeaderboardName);
+    }
     match block(move || database::new_leaderboard(&db.get()?, creator.id, &body.name)).await? {
         Ok(code) => Ok(web::Json(json!({ "invite_code": code }))),
         Err(e) => {
