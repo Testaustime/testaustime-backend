@@ -19,7 +19,7 @@ pub async fn add_friend(
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     match block(move || {
-        database::add_friend(&conn, user.id, &body.trim().trim_start_matches("ttfc_"))
+        database::add_friend(&conn, user.id, body.trim().trim_start_matches("ttfc_"))
     })
     .await?
     {

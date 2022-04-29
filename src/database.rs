@@ -606,7 +606,7 @@ pub fn get_coding_time_steps(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
 ) -> CodingTimeSteps {
-    return CodingTimeSteps {
+    CodingTimeSteps {
         all_time: get_user_coding_time_since(
             conn,
             uid,
@@ -625,5 +625,5 @@ pub fn get_coding_time_steps(
             chrono::Local::now().naive_local() - chrono::Duration::days(7),
         )
         .unwrap_or(0),
-    };
+    }
 }
