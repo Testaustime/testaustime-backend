@@ -1,15 +1,16 @@
-use crate::{
-    database::{self, get_coding_time_steps, get_user_by_name, remove_friend},
-    error::TimeError,
-    models::{CodingTimeSteps, FriendWithTime, UserId},
-    DbPool,
-};
 use actix_web::{
     error::*,
     web::{self, block, Data},
     HttpResponse, Responder,
 };
 use diesel::result::DatabaseErrorKind;
+
+use crate::{
+    database::{self, get_coding_time_steps, get_user_by_name, remove_friend},
+    error::TimeError,
+    models::{CodingTimeSteps, FriendWithTime, UserId},
+    DbPool,
+};
 
 #[post("/friends/add")]
 pub async fn add_friend(
