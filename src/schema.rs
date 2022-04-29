@@ -40,8 +40,8 @@ table! {
 table! {
     registered_users (id) {
         id -> Int4,
-        auth_token -> Varchar,
-        friend_code -> Varchar,
+        auth_token -> Bpchar,
+        friend_code -> Bpchar,
         username -> Varchar,
         password -> Bytea,
         salt -> Bytea,

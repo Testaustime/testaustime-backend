@@ -62,16 +62,11 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    let res = match add_activity(
-                        &db.get()?,
-                        user.id,
-                        inner_heartbeat.clone(),
-                        start,
-                        duration,
-                    ) {
-                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                        Err(e) => Err(ErrorInternalServerError(e)),
-                    }?;
+                    let res =
+                        match add_activity(&db.get()?, user.id, inner_heartbeat, start, duration) {
+                            Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
+                            Err(e) => Err(ErrorInternalServerError(e)),
+                        }?;
                     heartbeats.insert(
                         user,
                         (
@@ -95,13 +90,8 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
-                let res = match add_activity(
-                    &db.get()?,
-                    user.id,
-                    inner_heartbeat.clone(),
-                    start,
-                    duration,
-                ) {
+                let res = match add_activity(&db.get()?, user.id, inner_heartbeat, start, duration)
+                {
                     Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
                     Err(e) => Err(ErrorInternalServerError(e)),
                 }?;
@@ -163,7 +153,7 @@ pub async fn delete(
         delete_activity(
             &db.get()?,
             user.id,
-            body.parse::<i32>().map_err(|e| ErrorBadRequest(e))?,
+            body.parse::<i32>().map_err(ErrorBadRequest)?,
         )
     })
     .await??;

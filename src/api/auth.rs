@@ -1,4 +1,4 @@
-use std::{future::Future, lazy::SyncLazy, pin::Pin};
+use std::{future::Future, pin::Pin};
 
 use actix_web::{
     dev::Payload,
@@ -6,7 +6,6 @@ use actix_web::{
     web::{block, Data, Json},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
-use regex::Regex;
 
 use crate::{
     database::{
@@ -18,9 +17,6 @@ use crate::{
     requests::*,
     DbPool,
 };
-
-static VALID_USERNAME_REGEX: SyncLazy<Regex> =
-    SyncLazy::new(|| Regex::new("^[[:word:]]{2,32}$").unwrap());
 
 impl FromRequest for UserId {
     type Error = TimeError;
@@ -115,7 +111,7 @@ pub async fn register(
             "Password has to be between 8 and 128 characters long".to_string(),
         ));
     }
-    if !VALID_USERNAME_REGEX.is_match(&data.username) {
+    if !super::VALID_NAME_REGEX.is_match(&data.username) {
         return Err(TimeError::BadUsername);
     }
     Ok(Json(

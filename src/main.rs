@@ -56,10 +56,13 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to create connection pool"),
     );
 
+    let max_requests = config.max_requests_per_min.unwrap_or(30);
+    let max_heartbeats = config.max_heartbeats_per_min.unwrap_or(30);
+
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
-    let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min.unwrap_or(30)).start();
-    let heartbeat_ratelimiter =
-        RateLimiterStorage::new(config.max_heartbeats_per_min.unwrap_or(8)).start();
+    let ratelimiter = RateLimiterStorage::new(max_requests, 60).start();
+    let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
+
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin(&config.allowed_origin)
@@ -81,7 +84,8 @@ async fn main() -> std::io::Result<()> {
                     .wrap(RateLimiter {
                         storage: heartbeat_ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: config.max_requests_per_min.unwrap_or(10),
+                        maxrpm: max_heartbeats,
+                        reset_interval: 60,
                     })
                     .service(api::activity::update)
                     .service(api::activity::flush),
@@ -91,7 +95,8 @@ async fn main() -> std::io::Result<()> {
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: config.max_heartbeats_per_min.unwrap_or(30),
+                        maxrpm: max_requests,
+                        reset_interval: 60,
                     })
                     .service(api::activity::delete)
                     .service(api::auth::register)
