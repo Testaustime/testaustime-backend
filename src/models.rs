@@ -1,3 +1,4 @@
+#![allow(clippy::extra_unused_lifetimes)]
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
