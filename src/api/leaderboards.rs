@@ -133,7 +133,7 @@ pub async fn leave_leaderboard(
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
-        let left = block(move || database::remove_user_from_leaderboard(&db.get()?, user.id, lid))
+        let left = block(move || database::remove_user_from_leaderboard(&db.get()?, lid, user.id))
             .await??;
         if left {
             Ok(HttpResponse::Ok().finish())
