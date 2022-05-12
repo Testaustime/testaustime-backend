@@ -483,8 +483,7 @@ pub fn add_user_to_leaderboard(
             .select(diesel::dsl::count(user_id))
             .first::<i64>(conn)? as i32
     };
-    let result = crate::api::users::ListLeaderboard { name, member_count };
-    Ok(result)
+    Ok(crate::api::users::ListLeaderboard { name, member_count })
 }
 
 pub fn remove_user_from_leaderboard(
