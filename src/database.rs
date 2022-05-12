@@ -477,8 +477,9 @@ pub fn add_user_to_leaderboard(
         .values(&user)
         .execute(conn)?;
     let member_count: i32 = {
-        use crate::schema::leaderboard_members::dsl::*;
         use diesel::dsl::count;
+
+        use crate::schema::leaderboard_members::dsl::*;
         leaderboard_members
             .filter(leaderboard_id.eq(lid))
             .select(count(user_id))
