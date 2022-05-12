@@ -460,7 +460,7 @@ pub fn add_user_to_leaderboard(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     invite: &str,
-) -> Result<String, TimeError> {
+) -> Result<crate::api::users::ListLeaderboard, TimeError> {
     let (lid, name) = {
         use crate::schema::leaderboards::dsl::*;
         leaderboards
@@ -476,7 +476,19 @@ pub fn add_user_to_leaderboard(
     insert_into(crate::schema::leaderboard_members::table)
         .values(&user)
         .execute(conn)?;
-    Ok(name)
+    let member_count: i32 = {
+        use crate::schema::leaderboard_members::dsl::*;
+        use diesel::dsl::count;
+        leaderboard_members
+            .filter(leaderboard_id.eq(lid))
+            .select(count(user_id))
+            .first::<i64>(conn)? as i32
+    };
+    let result = crate::api::users::ListLeaderboard {
+        name: name,
+        member_count: member_count,
+    };
+    Ok(result)
 }
 
 pub fn remove_user_from_leaderboard(
