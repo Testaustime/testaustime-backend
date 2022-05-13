@@ -118,6 +118,9 @@ pub async fn join_leaderboard(
                     DatabaseErrorKind::UniqueViolation,
                     ..,
                 )) => TimeError::AlreadyMember,
+                TimeError::DieselError(diesel::result::Error::NotFound) => {
+                    TimeError::LeaderboardNotFound
+                }
                 _ => e,
             })
         }
