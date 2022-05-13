@@ -52,9 +52,10 @@ impl ResponseError for TimeError {
         error!("{}", self);
         match self {
             TimeError::UserNotFound | TimeError::LeaderboardNotFound => StatusCode::NOT_FOUND,
-            TimeError::BadUsername | TimeError::InvalidLength(_) | TimeError::BadId => {
-                StatusCode::BAD_REQUEST
-            }
+            TimeError::BadUsername
+            | TimeError::InvalidLength(_)
+            | TimeError::BadId
+            | TimeError::BadLeaderboardName => StatusCode::BAD_REQUEST,
             TimeError::CurrentUser
             | TimeError::UserExists
             | TimeError::AlreadyFriends
