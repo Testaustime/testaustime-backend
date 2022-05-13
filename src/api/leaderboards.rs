@@ -121,7 +121,7 @@ pub async fn join_leaderboard(
                 _ => e,
             })
         }
-        Ok(name) => Ok(web::Json(json!({ "name": name }))),
+        Ok(leaderboard) => Ok(web::Json(json!(leaderboard))),
     }
 }
 
