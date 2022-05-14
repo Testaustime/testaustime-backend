@@ -1,7 +1,7 @@
 #![feature(let_else, once_cell)]
 
 mod api;
-mod database;
+pub mod database;
 mod error;
 pub mod models;
 mod requests;
