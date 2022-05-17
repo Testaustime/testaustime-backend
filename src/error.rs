@@ -43,6 +43,8 @@ pub enum TimeError {
     AlreadyMember,
     #[error("You're not a member")]
     NotMember,
+    #[error("There are no more admins left, you cannot leave")]
+    LastAdmin,
 }
 
 unsafe impl Send for TimeError {}
@@ -61,7 +63,8 @@ impl ResponseError for TimeError {
             | TimeError::AlreadyFriends
             | TimeError::LeaderboardExists
             | TimeError::AlreadyMember
-            | TimeError::NotMember => StatusCode::CONFLICT,
+            | TimeError::NotMember
+            | TimeError::LastAdmin => StatusCode::CONFLICT,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
