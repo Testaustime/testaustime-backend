@@ -64,7 +64,7 @@ impl ResponseError for TimeError {
             | TimeError::LeaderboardExists
             | TimeError::AlreadyMember
             | TimeError::NotMember
-            | TimeError::LastAdmin => StatusCode::CONFLICT,
+            | TimeError::LastAdmin => StatusCode::FORBIDDEN,
             TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
