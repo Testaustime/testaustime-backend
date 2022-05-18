@@ -42,7 +42,7 @@ pub async fn delete_user(
     pool: Data<DbPool>,
     user: web::Json<UserAuthentication>,
 ) -> Result<impl Responder, TimeError> {
-    let mut clone = pool.clone();
+    let clone = pool.clone();
     if let Some(user) = block(move || {
         database::verify_user_password(&mut pool.get()?, &user.username, &user.password)
     })

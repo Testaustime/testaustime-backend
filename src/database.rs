@@ -120,7 +120,7 @@ pub fn new_user(
 
     diesel::insert_into(testaustime_users::table)
         .values(&testaustime_user)
-        .execute(conn);
+        .execute(conn)?;
 
     Ok(new_user)
 }

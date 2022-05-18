@@ -107,7 +107,7 @@ pub async fn remove(
     db: Data<DbPool>,
     body: String,
 ) -> Result<impl Responder, TimeError> {
-    let mut clone = db.clone();
+    let clone = db.clone();
     let friend = block(move || get_user_by_name(&mut clone.get()?, &body)).await??;
     let deleted = block(move || remove_friend(&mut db.get()?, user.id, friend.id)).await??;
     if deleted {
