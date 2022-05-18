@@ -62,11 +62,16 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    let res =
-                        match add_activity(&db.get()?, user.id, inner_heartbeat, start, duration) {
-                            Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                            Err(e) => Err(ErrorInternalServerError(e)),
-                        }?;
+                    let res = match add_activity(
+                        &mut db.get()?,
+                        user.id,
+                        inner_heartbeat,
+                        start,
+                        duration,
+                    ) {
+                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
+                        Err(e) => Err(ErrorInternalServerError(e)),
+                    }?;
                     heartbeats.insert(
                         user,
                         (
@@ -90,11 +95,11 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
-                let res = match add_activity(&db.get()?, user.id, inner_heartbeat, start, duration)
-                {
-                    Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                    Err(e) => Err(ErrorInternalServerError(e)),
-                }?;
+                let res =
+                    match add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration) {
+                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
+                        Err(e) => Err(ErrorInternalServerError(e)),
+                    }?;
                 heartbeats.insert(
                     user,
                     (
@@ -132,8 +137,10 @@ pub async fn flush(
             let (inner_heartbeat, start, duration) = flushme.to_owned();
             drop(flushme);
             heartbeats.remove(&user);
-            match block(move || add_activity(&db.get()?, user.id, inner_heartbeat, start, duration))
-                .await?
+            match block(move || {
+                add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration)
+            })
+            .await?
             {
                 Ok(_) => Ok(HttpResponse::Ok().finish()),
                 Err(e) => Err(e),
@@ -151,7 +158,7 @@ pub async fn delete(
 ) -> Result<impl Responder, TimeError> {
     let deleted = block(move || {
         delete_activity(
-            &db.get()?,
+            &mut db.get()?,
             user.id,
             body.parse::<i32>().map_err(ErrorBadRequest)?,
         )
