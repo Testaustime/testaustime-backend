@@ -13,7 +13,7 @@ use crate::{
         get_user_by_token, new_user, regenerate_token, verify_user_password,
     },
     error::TimeError,
-    models::{SelfUser, TestaustimeUser, UserId, UserIdentity},
+    models::{SelfUser, UserId, UserIdentity},
     requests::*,
     DbPool,
 };
