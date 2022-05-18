@@ -1,14 +1,25 @@
-use std::{future::Future, pin::Pin};
-
 use actix_web::{
-    dev::Payload,
-    error::*,
-    web::{block, Data, Json},
-    FromRequest, HttpRequest, HttpResponse, Responder,
+    error::*, Responder, web::{Query, Data},
 };
 
-st:w
+use awc::Client;
+use serde_derive::Deserialize;
 
-#[post("/token")]
-pub async fn exchange_code(: String) {
+use crate::error::TimeError;
+
+#[derive(Deserialize)]
+struct TokenExchangeRequest {
+    state: String
+}
+
+#[post("/oauth/token")]
+async fn exchange_code(request: Query<TokenExchangeRequest>, client: Data<Client>) -> Result<impl Responder, TimeError> {
+    let body = client.get(format!("id.testausserveri.fi/api/v1/token?state={}", request.state))
+        .send()
+        .await
+        .unwrap()
+        .body()
+        .await
+        .unwrap();
+    Ok(body)
 }

@@ -11,6 +11,7 @@ mod utils;
 use actix::prelude::*;
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
+use awc::Client;
 use diesel::{r2d2::ConnectionManager, PgConnection};
 use r2d2::Pool;
 use serde_derive::Deserialize;
@@ -64,6 +65,7 @@ async fn main() -> std::io::Result<()> {
     let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
 
     HttpServer::new(move || {
+        let client = Client::new();
         let cors = Cors::default()
             .allowed_origin(&config.allowed_origin)
             .allowed_origin("https://testaustime.fi")
@@ -120,10 +122,12 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::promote_member)
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
-                    .service(api::leaderboards::regenerate_invite),
+                    .service(api::leaderboards::regenerate_invite)
+                    .service(api::oauth::exchange_code),
             )
             .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store))
+            .app_data(Data::new(client))
     })
     .bind(config.address)?
     .run()
