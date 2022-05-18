@@ -149,7 +149,7 @@ pub async fn changeusername(
 
 #[post("/auth/changepassword")]
 pub async fn changepassword(
-    userid: UserId,
+    user: UserIdentity,
     data: Json<PasswordChangeRequest>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
@@ -161,12 +161,10 @@ pub async fn changepassword(
     let old = data.old.to_owned();
     let mut conn = db.get()?;
     let mut conn2 = db.get()?;
-    let mut conn3 = db.get()?;
-    let user = block(move || get_user_by_id(&mut db.get()?, userid.id)).await??;
-    let tuser = block(move || get_testaustime_user_by_id(&mut conn, userid.id)).await??;
-    let k = block(move || verify_user_password(&mut conn2, &user.username, &old)).await??;
+    let tuser = block(move || get_testaustime_user_by_id(&mut db.get()?, user.id)).await??;
+    let k = block(move || verify_user_password(&mut conn, &user.username, &old)).await??;
     if k.is_some() || tuser.password.iter().all(|n| *n == 0) {
-        match change_password(&mut conn3, userid.id, &data.new) {
+        match change_password(&mut conn2, user.id, &data.new) {
             Ok(_) => Ok(HttpResponse::Ok().finish()),
             Err(e) => Err(e),
         }

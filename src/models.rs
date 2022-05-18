@@ -61,6 +61,16 @@ impl From<UserIdentity> for SelfUser {
     }
 }
 
+use crate::schema::testausid_users;
+
+#[derive(Insertable, Serialize, Clone)]
+#[diesel(table_name = testausid_users)]
+pub struct NewTestausIdUser {
+    pub user_id: i32,
+    pub service_id: i32,
+    pub identity: i32,
+}
+
 use crate::schema::user_identities;
 
 #[derive(Insertable, Serialize, Clone)]
