@@ -136,6 +136,13 @@ pub async fn leave_leaderboard(
 ) -> Result<impl Responder, TimeError> {
     let conn = db.get()?;
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
+        let conn = db.get()?;
+        let conn2 = db.get()?;
+        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await??
+            && block(move || database::get_leaderboard_admin_count(&conn2, lid)).await?? == 1
+        {
+            return Err(TimeError::LastAdmin);
+        }
         let left = block(move || database::remove_user_from_leaderboard(&db.get()?, lid, user.id))
             .await??;
         if left {

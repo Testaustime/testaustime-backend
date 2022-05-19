@@ -565,6 +565,17 @@ pub fn is_leaderboard_admin(
         .unwrap_or(false))
 }
 
+pub fn get_leaderboard_admin_count(
+    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    lid: i32,
+) -> Result<i64, TimeError> {
+    use crate::schema::leaderboard_members::dsl::*;
+    Ok(leaderboard_members
+        .filter(leaderboard_id.eq(lid).and(admin.eq(true)))
+        .select(diesel::dsl::count(user_id))
+        .first::<i64>(conn)?)
+}
+
 pub fn get_user_leaderboards(
     conn: &PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
