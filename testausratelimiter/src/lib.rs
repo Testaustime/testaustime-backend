@@ -91,7 +91,7 @@ impl Handler<IpRequest> for RateLimiterStorage {
                     Some(self.maxrpm - *r),
                     Duration::from_secs(self.reset_interval as u64),
                 ))
-            } else if *r as usize > self.maxrpm {
+            } else if *r as usize >= self.maxrpm {
                 Ok((None, duration))
             } else {
                 *r += 1;
