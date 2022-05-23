@@ -33,7 +33,6 @@ pub struct TimeConfig {
     pub ratelimit_by_peer_ip: Option<bool>,
     pub max_requests_per_min: Option<usize>,
     pub max_heartbeats_per_min: Option<usize>,
-    pub max_registers_per_day: Option<usize>,
     pub address: String,
     pub database_url: String,
     pub allowed_origin: String,
@@ -59,12 +58,10 @@ async fn main() -> std::io::Result<()> {
 
     let max_requests = config.max_requests_per_min.unwrap_or(30);
     let max_heartbeats = config.max_heartbeats_per_min.unwrap_or(30);
-    let max_registers = config.max_registers_per_day.unwrap_or(3);
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let ratelimiter = RateLimiterStorage::new(max_requests, 60).start();
     let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
-    let registers_ratelimiter = RateLimiterStorage::new(max_registers, 86400).start();
 
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -96,22 +93,13 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::scope("")
                     .wrap(RateLimiter {
-                        storage: registers_ratelimiter.clone(),
-                        use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: max_registers,
-                        reset_interval: 86400,
-                    })
-                    .service(api::auth::register),
-            )
-            .service(
-                web::scope("")
-                    .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
                         maxrpm: max_requests,
                         reset_interval: 60,
                     })
                     .service(api::activity::delete)
+                    .service(api::auth::register)
                     .service(api::auth::login)
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
