@@ -101,7 +101,6 @@ pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder
     }
 }
 
-#[post("/auth/register")]
 pub async fn register(
     data: Json<RegisterRequest>,
     db: Data<DbPool>,
