@@ -86,7 +86,7 @@ pub fn regenerate_token(
     Ok(token)
 }
 
-pub fn new_user(
+pub fn new_testaustime_user(
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     username: &str,
     password: &str,
@@ -655,4 +655,57 @@ pub fn get_testaustime_user_by_id(
     Ok(testaustime_users
         .filter(identity.eq(uid))
         .first::<TestaustimeUser>(conn)?)
+}
+
+pub fn testausid_login(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    user_id_arg: String,
+    username: String,
+    platform_id: String,
+) -> Result<String, TimeError> {
+    use crate::schema::{
+        testausid_users::dsl::{identity, testausid_users, user_id},
+        user_identities::dsl::{auth_token, id, user_identities},
+    };
+
+    let user_identity_opt = testausid_users
+        .filter(user_id.eq(&user_id_arg))
+        .select(identity)
+        .first::<i32>(conn)
+        .optional()?;
+
+    if let Some(user_identity) = user_identity_opt {
+        let token = user_identities
+            .filter(id.eq(user_identity))
+            .select(auth_token)
+            .first::<String>(conn)?;
+
+        Ok(token)
+    } else {
+        let token = generate_token();
+        let new_user = NewUserIdentity {
+            //FIXME: You can get around using a clone here
+            auth_token: token.clone(),
+            registration_time: chrono::Local::now().naive_local(),
+            username,
+            friend_code: generate_friend_code(),
+        };
+        let new_user_id = diesel::insert_into(crate::schema::user_identities::table)
+            .values(&new_user)
+            .returning(id)
+            .get_results::<i32>(conn)
+            .map_err(|_| TimeError::UserExists)?;
+
+        let testausid_user = NewTestausIdUser {
+            user_id: user_id_arg,
+            identity: new_user_id[0],
+            service_id: platform_id,
+        };
+
+        diesel::insert_into(testausid_users)
+            .values(&testausid_user)
+            .execute(conn)?;
+
+        Ok(token)
+    }
 }

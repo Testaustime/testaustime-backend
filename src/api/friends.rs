@@ -63,7 +63,7 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
             let friends_with_time = futures::future::join_all(friends.iter().map(|friend| async {
                 let mut conn2 = db.get().unwrap();
                 let friend_id = friend.id;
-                return FriendWithTime {
+                FriendWithTime {
                     username: friend.username.clone(),
                     coding_time: match block(move || get_coding_time_steps(&mut conn2, friend_id))
                         .await
@@ -75,7 +75,7 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
                             past_week: 0,
                         },
                     },
-                };
+                }
             }))
             .await;
             Ok(web::Json(friends_with_time))

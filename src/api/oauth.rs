@@ -1,25 +1,98 @@
-use actix_web::{
-    error::*, Responder, web::{Query, Data},
-};
+use std::{collections::HashMap, sync::LazyLock};
 
+use actix_web::{
+    cookie::Cookie,
+    error::*,
+    web::{block, Data, Query},
+    HttpResponse, Responder,
+};
 use awc::Client;
 use serde_derive::Deserialize;
 
-use crate::error::TimeError;
+use crate::{database::testausid_login, error::TimeError, DbPool};
 
 #[derive(Deserialize)]
 struct TokenExchangeRequest {
-    state: String
+    code: String,
 }
 
-#[post("/oauth/token")]
-async fn exchange_code(request: Query<TokenExchangeRequest>, client: Data<Client>) -> Result<impl Responder, TimeError> {
-    let body = client.get(format!("id.testausserveri.fi/api/v1/token?state={}", request.state))
+#[derive(Deserialize, Debug)]
+struct TokenResponse {
+    token: String,
+}
+
+#[derive(Deserialize)]
+struct ClientInfo {
+    #[serde(rename = "client_id")]
+    id: String,
+    #[serde(rename = "client_secret")]
+    secret: String,
+    redirect_uri: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct TestausIdApiUser {
+    id: String,
+    name: String,
+    platform: TestausIdPlatformInfo,
+}
+
+#[derive(Deserialize, Debug)]
+struct TestausIdPlatformInfo {
+    id: String,
+}
+
+static CLIENT_INFO: LazyLock<ClientInfo> = LazyLock::new(|| {
+    toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
+        .expect("Invalid Toml in settings.toml")
+});
+
+#[get("/auth/callback")]
+async fn callback(
+    request: Query<TokenExchangeRequest>,
+    client: Data<Client>,
+    db: Data<DbPool>,
+) -> Result<impl Responder, TimeError> {
+    if request.code.chars().any(|c| !c.is_alphanumeric()) {
+        return Err(TimeError::BadCode);
+    }
+
+    let res = client
+        .post("http://localhost:6969/api/v1/token")
+        .insert_header(("content-type", "application/x-www-form-urlencoded"))
+        .send_form(&HashMap::from([
+            ("code", &request.code),
+            ("redirect_uri", &CLIENT_INFO.redirect_uri),
+            ("client_id", &CLIENT_INFO.id),
+            ("client_secret", &CLIENT_INFO.secret),
+        ]))
+        .await
+        .unwrap()
+        .json::<TokenResponse>()
+        .await
+        .unwrap();
+
+    let res = client
+        .get("http://localhost:6969/api/v1/me")
+        .insert_header(("Authorization", format!("Bearer {}", res.token)))
         .send()
         .await
         .unwrap()
-        .body()
+        .json::<TestausIdApiUser>()
         .await
         .unwrap();
-    Ok(body)
+
+    let token =
+        block(move || testausid_login(&mut db.get()?, res.id, res.name, res.platform.id)).await??;
+
+    Ok(HttpResponse::PermanentRedirect()
+        .insert_header(("location", "https://vilepis.dev"))
+        .cookie(
+            Cookie::build("testaustime_token", token)
+                .domain("testaustime.fi")
+                .path("/")
+                .secure(true)
+                .finish(),
+        )
+        .finish())
 }

@@ -123,7 +123,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
                     .service(api::leaderboards::regenerate_invite)
-                    .service(api::oauth::exchange_code),
+                    .service(api::oauth::callback),
             )
             .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store))

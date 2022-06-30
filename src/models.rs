@@ -66,8 +66,16 @@ use crate::schema::testausid_users;
 #[derive(Insertable, Serialize, Clone)]
 #[diesel(table_name = testausid_users)]
 pub struct NewTestausIdUser {
-    pub user_id: i32,
-    pub service_id: i32,
+    pub user_id: String,
+    pub service_id: String,
+    pub identity: i32,
+}
+
+#[derive(Queryable, Serialize, Clone)]
+pub struct TestausIdUser {
+    pub id: i32,
+    pub user_id: String,
+    pub service_id: String,
     pub identity: i32,
 }
 

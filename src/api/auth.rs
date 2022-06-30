@@ -10,7 +10,7 @@ use actix_web::{
 use crate::{
     database::{
         change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
-        get_user_by_token, new_user, regenerate_token, verify_user_password,
+        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password,
     },
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
@@ -117,7 +117,8 @@ pub async fn register(
         return Err(TimeError::BadUsername);
     }
     Ok(Json(
-        block(move || new_user(&mut db.get()?, &data.username, &data.password)).await??,
+        block(move || new_testaustime_user(&mut db.get()?, &data.username, &data.password))
+            .await??,
     ))
 }
 

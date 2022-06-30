@@ -40,8 +40,8 @@ table! {
 table! {
     testausid_users (id) {
         id -> Int4,
-        user_id -> Int4,
-        service_id -> Int4,
+        user_id -> Text,
+        service_id -> Text,
         identity -> Int4,
     }
 }

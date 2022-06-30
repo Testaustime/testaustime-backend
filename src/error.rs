@@ -43,6 +43,8 @@ pub enum TimeError {
     AlreadyMember,
     #[error("You're not a member")]
     NotMember,
+    #[error("Bad code")]
+    BadCode,
 }
 
 unsafe impl Send for TimeError {}

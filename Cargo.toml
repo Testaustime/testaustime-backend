@@ -9,9 +9,9 @@ authors = ["Ville Järvinen <jarvinenville606@gmail.com>", "Luukas Pörtfors <la
 lto = true
 
 [dependencies]
-actix-web = { version = "4.0.1", features = ["macros","openssl"] }
+actix-web = { version = "4.0.1", features = ["macros", "rustls"] }
 actix = "0.13"
-awc = "3.0.0"
+awc = { version = "3.0.0", features = ["rustls"] }
 actix-cors = "0.6"
 http = "0.2"
 regex = "1.5"
