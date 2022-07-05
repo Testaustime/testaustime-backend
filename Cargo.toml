@@ -5,13 +5,17 @@ edition = "2021"
 authors = ["Ville Järvinen <jarvinenville606@gmail.com>", "Luukas Pörtfors <lajp@iki.fi>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["testausid"]
+testausid = ["dep:awc"]
+
 [profile.release]
 lto = true
 
 [dependencies]
 actix-web = { version = "4.0.1", features = ["macros", "rustls"] }
 actix = "0.13"
-awc = { version = "3.0.0", features = ["rustls"] }
+awc = { version = "3.0.0", features = ["rustls"], optional = true }
 actix-cors = "0.6"
 http = "0.2"
 regex = "1.5"

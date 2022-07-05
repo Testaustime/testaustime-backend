@@ -86,7 +86,7 @@ async fn callback(
         block(move || testausid_login(&mut db.get()?, res.id, res.name, res.platform.id)).await??;
 
     Ok(HttpResponse::PermanentRedirect()
-        .insert_header(("location", "https://vilepis.dev"))
+        .insert_header(("location", "https://testaustime.fi/oauth_redirect"))
         .cookie(
             Cookie::build("testaustime_token", token)
                 .domain("testaustime.fi")

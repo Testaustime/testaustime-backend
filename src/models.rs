@@ -61,8 +61,10 @@ impl From<UserIdentity> for SelfUser {
     }
 }
 
+#[cfg(feature = "testausid")]
 use crate::schema::testausid_users;
 
+#[cfg(feature = "testausid")]
 #[derive(Insertable, Serialize, Clone)]
 #[diesel(table_name = testausid_users)]
 pub struct NewTestausIdUser {
@@ -71,6 +73,7 @@ pub struct NewTestausIdUser {
     pub identity: i32,
 }
 
+#[cfg(feature = "testausid")]
 #[derive(Queryable, Serialize, Clone)]
 pub struct TestausIdUser {
     pub id: i32,

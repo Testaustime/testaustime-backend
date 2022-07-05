@@ -11,6 +11,7 @@ mod utils;
 use actix::prelude::*;
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
+#[cfg(feature = "testausid")]
 use awc::Client;
 use diesel::{r2d2::ConnectionManager, PgConnection};
 use r2d2::Pool;
@@ -65,6 +66,7 @@ async fn main() -> std::io::Result<()> {
     let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
 
     HttpServer::new(move || {
+        #[cfg(feature = "testausid")]
         let client = Client::new();
         let cors = Cors::default()
             .allowed_origin(&config.allowed_origin)
@@ -76,7 +78,8 @@ async fn main() -> std::io::Result<()> {
                 http::header::CONTENT_TYPE,
             ])
             .max_age(3600);
-        App::new()
+        #[allow(clippy::let_and_return)]
+        let mut app = App::new()
             .wrap(cors)
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
@@ -92,8 +95,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::activity::update)
                     .service(api::activity::flush),
             )
-            .service(
-                web::scope("")
+            .service({
+                let scope = web::scope("")
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
@@ -122,12 +125,28 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::promote_member)
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
-                    .service(api::leaderboards::regenerate_invite)
-                    .service(api::oauth::callback),
-            )
+                    .service(api::leaderboards::regenerate_invite);
+                #[cfg(feature = "testausid")]
+                {
+                    let mut scope = scope;
+                    scope.service(api::oauth::callback)
+                }
+                #[cfg(not(feature = "testausid"))]
+                {
+                    scope
+                }
+            })
             .app_data(Data::clone(&pool))
-            .app_data(Data::clone(&heartbeat_store))
-            .app_data(Data::new(client))
+            .app_data(Data::clone(&heartbeat_store));
+        #[cfg(feature = "testausid")]
+        {
+            let mut app = app;
+            app.app_data(Data::new(client))
+        }
+        #[cfg(not(feature = "testausid"))]
+        {
+            app
+        }
     })
     .bind(config.address)?
     .run()

@@ -657,6 +657,7 @@ pub fn get_testaustime_user_by_id(
         .first::<TestaustimeUser>(conn)?)
 }
 
+#[cfg(feature = "testausid")]
 pub fn testausid_login(
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user_id_arg: String,
