@@ -37,7 +37,7 @@ pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Resp
     ))
 }
 
-#[delete("/users/@me/delete")]
+#[delete("/users/@me")]
 pub async fn delete_user(
     pool: Data<DbPool>,
     user: web::Json<UserAuthentication>,
@@ -48,6 +48,21 @@ pub async fn delete_user(
             .await??
     {
         block(move || database::delete_user(&clone.get()?, user.id)).await??;
+    }
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[delete("/users/@me/coding_data")]
+pub async fn delete_user_data(
+    pool: Data<DbPool>,
+    user: web::Json<UserAuthentication>,
+) -> Result<impl Responder, TimeError> {
+    let clone = pool.clone();
+    if let Some(user) =
+        block(move || database::verify_user_password(&pool.get()?, &user.username, &user.password))
+            .await??
+    {
+        block(move || database::delete_user_data_by_id(&clone.get()?, user.id)).await??;
     }
     Ok(HttpResponse::Ok().finish())
 }
