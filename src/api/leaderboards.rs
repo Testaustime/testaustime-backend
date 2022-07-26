@@ -32,7 +32,7 @@ pub async fn create_leaderboard(
     if !super::VALID_NAME_REGEX.is_match(&body.name) {
         return Err(TimeError::BadLeaderboardName);
     }
-    match block(move || database::new_leaderboard(&db.get()?, creator.id, &body.name)).await? {
+    match block(move || database::new_leaderboard(&mut db.get()?, creator.id, &body.name)).await? {
         Ok(code) => Ok(web::Json(json!({ "invite_code": code }))),
         Err(e) => {
             error!("{}", e);
@@ -53,14 +53,14 @@ pub async fn get_leaderboard(
     path: Path<(String,)>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
+    let mut conn = db.get()?;
     let name = path.0.clone();
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &name)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_member(&conn, user.id, lid)).await?? {
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &name)).await? {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_member(&mut conn, user.id, lid)).await?? {
             Ok(web::Json({
-                let conn = db.get()?;
-                block(move || database::get_leaderboard(&conn, &path.0)).await??
+                let mut conn = db.get()?;
+                block(move || database::get_leaderboard(&mut conn, &path.0)).await??
             }))
         } else {
             error!("{}", TimeError::Unauthorized);
@@ -78,13 +78,13 @@ pub async fn delete_leaderboard(
     path: Path<(String,)>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
+    let mut conn = db.get()?;
     let name = path.0.clone();
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &name)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
-            let conn = db.get()?;
-            block(move || database::delete_leaderboard(&conn, &path.0)).await??;
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &name)).await? {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_admin(&mut conn, user.id, lid)).await?? {
+            let mut conn = db.get()?;
+            block(move || database::delete_leaderboard(&mut conn, &path.0)).await??;
             Ok(HttpResponse::Ok().finish())
         } else {
             error!("{}", TimeError::Unauthorized);
@@ -104,7 +104,7 @@ pub async fn join_leaderboard(
 ) -> Result<impl Responder, TimeError> {
     match block(move || {
         database::add_user_to_leaderboard(
-            &db.get()?,
+            &mut db.get()?,
             user.id,
             body.invite.trim().trim_start_matches("ttlic_"),
         )
@@ -163,17 +163,18 @@ pub async fn promote_member(
     db: Data<DbPool>,
     promotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
-            let conn = db.get()?;
+    let mut conn = db.get()?;
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &path.0)).await?
+    {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_admin(&mut conn, user.id, lid)).await?? {
+            let mut conn = db.get()?;
             if let Ok(newadmin) =
-                block(move || database::get_user_by_name(&conn, &promotion.user)).await?
+                block(move || database::get_user_by_name(&mut conn, &promotion.user)).await?
             {
-                let conn = db.get()?;
+                let mut conn = db.get()?;
                 if block(move || {
-                    database::promote_user_to_leaderboard_admin(&conn, lid, newadmin.id)
+                    database::promote_user_to_leaderboard_admin(&mut conn, lid, newadmin.id)
                 })
                 .await??
                 {
@@ -203,17 +204,18 @@ pub async fn demote_member(
     db: Data<DbPool>,
     demotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
-            let conn = db.get()?;
+    let mut conn = db.get()?;
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &path.0)).await?
+    {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_admin(&mut conn, user.id, lid)).await?? {
+            let mut conn = db.get()?;
             if let Ok(oldadmin) =
-                block(move || database::get_user_by_name(&conn, &demotion.user)).await?
+                block(move || database::get_user_by_name(&mut conn, &demotion.user)).await?
             {
-                let conn = db.get()?;
+                let mut conn = db.get()?;
                 if block(move || {
-                    database::demote_user_to_leaderboard_member(&conn, lid, oldadmin.id)
+                    database::demote_user_to_leaderboard_member(&mut conn, lid, oldadmin.id)
                 })
                 .await??
                 {
@@ -243,16 +245,17 @@ pub async fn kick_member(
     db: Data<DbPool>,
     kick: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
-            let conn = db.get()?;
+    let mut conn = db.get()?;
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &path.0)).await?
+    {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_admin(&mut conn, user.id, lid)).await?? {
+            let mut conn = db.get()?;
             if let Ok(kmember) =
-                block(move || database::get_user_by_name(&conn, &kick.user)).await?
+                block(move || database::get_user_by_name(&mut conn, &kick.user)).await?
             {
-                let conn = db.get()?;
-                if block(move || database::remove_user_from_leaderboard(&conn, lid, kmember.id))
+                let mut conn = db.get()?;
+                if block(move || database::remove_user_from_leaderboard(&mut conn, lid, kmember.id))
                     .await??
                 {
                     Ok(HttpResponse::Ok().finish())
@@ -279,12 +282,14 @@ pub async fn regenerate_invite(
     path: Path<(String,)>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    let conn = db.get()?;
-    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&conn, &path.0)).await? {
-        let conn = db.get()?;
-        if block(move || database::is_leaderboard_admin(&conn, user.id, lid)).await?? {
-            let conn = db.get()?;
-            let code = block(move || database::regenerate_leaderboard_invite(&conn, lid)).await??;
+    let mut conn = db.get()?;
+    if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &path.0)).await?
+    {
+        let mut conn = db.get()?;
+        if block(move || database::is_leaderboard_admin(&mut conn, user.id, lid)).await?? {
+            let mut conn = db.get()?;
+            let code =
+                block(move || database::regenerate_leaderboard_invite(&mut conn, lid)).await??;
             Ok(web::Json(json!({ "invite_code": code })))
         } else {
             error!("{}", TimeError::Unauthorized);

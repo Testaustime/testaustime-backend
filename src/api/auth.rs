@@ -9,11 +9,11 @@ use actix_web::{
 
 use crate::{
     database::{
-        change_password, change_username, get_user_by_id, get_user_by_token, new_user,
-        regenerate_token, verify_user_password,
+        change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
+        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password,
     },
     error::TimeError,
-    models::{RegisteredUser, SelfUser, UserId},
+    models::{SelfUser, UserId, UserIdentity},
     requests::*,
     DbPool,
 };
@@ -30,7 +30,7 @@ impl FromRequest for UserId {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&db.get()?, token)
+                    get_user_by_token(&mut db.get()?, token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(UserId { id: user.id })
@@ -44,7 +44,7 @@ impl FromRequest for UserId {
     }
 }
 
-impl FromRequest for RegisteredUser {
+impl FromRequest for UserIdentity {
     type Error = TimeError;
     type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
 
@@ -56,7 +56,7 @@ impl FromRequest for RegisteredUser {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&db.get()?, token)
+                    get_user_by_token(&mut db.get()?, token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(user)
@@ -80,7 +80,9 @@ pub async fn login(
             "Password cannot be longer than 128 characters".to_string(),
         ));
     }
-    match block(move || verify_user_password(&db.get()?, &data.username, &data.password)).await? {
+    match block(move || verify_user_password(&mut db.get()?, &data.username, &data.password))
+        .await?
+    {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
         Ok(None) => Err(TimeError::Unauthorized),
         Err(e) => Err(e),
@@ -89,7 +91,7 @@ pub async fn login(
 
 #[post("/auth/regenerate")]
 pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
-    match block(move || regenerate_token(&db.get()?, user.id)).await? {
+    match block(move || regenerate_token(&mut db.get()?, user.id)).await? {
         Ok(token) => {
             let token = json!({ "token": token });
             Ok(Json(token))
@@ -114,7 +116,8 @@ pub async fn register(
         return Err(TimeError::BadUsername);
     }
     Ok(Json(
-        block(move || new_user(&db.get()?, &data.username, &data.password)).await??,
+        block(move || new_testaustime_user(&mut db.get()?, &data.username, &data.password))
+            .await??,
     ))
 }
 
@@ -130,9 +133,10 @@ pub async fn changeusername(
         ));
     }
 
-    let conn = db.get()?;
-    match block(move || get_user_by_id(&conn, userid.id)).await? {
-        Ok(user) => match block(move || change_username(&db.get()?, user.id, &data.new)).await? {
+    let mut conn = db.get()?;
+    match block(move || get_user_by_id(&mut conn, userid.id)).await? {
+        Ok(user) => match block(move || change_username(&mut db.get()?, user.id, &data.new)).await?
+        {
             Ok(_) => Ok(HttpResponse::Ok().finish()),
             Err(e) => Err(e),
         },
@@ -145,7 +149,7 @@ pub async fn changeusername(
 
 #[post("/auth/changepassword")]
 pub async fn changepassword(
-    userid: UserId,
+    user: UserIdentity,
     data: Json<PasswordChangeRequest>,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
@@ -154,30 +158,17 @@ pub async fn changepassword(
             "Password has to be between 8 and 128 characters long".to_string(),
         ));
     }
-    // FIXME: This whole thing is just horrible
     let old = data.old.to_owned();
-    let clone = db.clone();
-    let clone2 = db.clone();
-    match block(move || get_user_by_id(&clone.get()?, userid.id)).await? {
-        Ok(user) => {
-            match block(move || verify_user_password(&clone2.get()?, &user.username, &old)).await? {
-                Ok(k) => {
-                    if k.is_some() || user.password.iter().all(|n| *n == 0) {
-                        // Some noobs don't have password (me)
-                        match change_password(&db.get()?, userid.id, &data.new) {
-                            Ok(_) => Ok(HttpResponse::Ok().finish()),
-                            Err(e) => Err(e),
-                        }
-                    } else {
-                        Err(TimeError::Unauthorized)
-                    }
-                }
-                Err(e) => Err(e),
-            }
+    let mut conn = db.get()?;
+    let mut conn2 = db.get()?;
+    let tuser = block(move || get_testaustime_user_by_id(&mut db.get()?, user.id)).await??;
+    let k = block(move || verify_user_password(&mut conn, &user.username, &old)).await??;
+    if k.is_some() || tuser.password.iter().all(|n| *n == 0) {
+        match change_password(&mut conn2, user.id, &data.new) {
+            Ok(_) => Ok(HttpResponse::Ok().finish()),
+            Err(e) => Err(e),
         }
-        Err(e) => {
-            error!("{}", e);
-            Err(e)
-        }
+    } else {
+        Err(TimeError::Unauthorized)
     }
 }

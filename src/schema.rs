@@ -38,25 +38,45 @@ table! {
 }
 
 table! {
-    registered_users (id) {
+    testausid_users (id) {
         id -> Int4,
-        auth_token -> Bpchar,
-        friend_code -> Bpchar,
-        username -> Varchar,
+        user_id -> Text,
+        service_id -> Text,
+        identity -> Int4,
+    }
+}
+
+table! {
+    testaustime_users (id) {
+        id -> Int4,
         password -> Bytea,
         salt -> Bytea,
+        identity -> Int4,
+    }
+}
+
+table! {
+    user_identities (id) {
+        id -> Int4,
+        username -> Varchar,
+        auth_token -> Bpchar,
+        friend_code -> Bpchar,
         registration_time -> Timestamp,
     }
 }
 
-joinable!(coding_activities -> registered_users (user_id));
+joinable!(coding_activities -> user_identities (user_id));
 joinable!(leaderboard_members -> leaderboards (leaderboard_id));
-joinable!(leaderboard_members -> registered_users (user_id));
+joinable!(leaderboard_members -> user_identities (user_id));
+joinable!(testausid_users -> user_identities (identity));
+joinable!(testaustime_users -> user_identities (identity));
 
 allow_tables_to_appear_in_same_query!(
     coding_activities,
     friend_relations,
     leaderboard_members,
     leaderboards,
-    registered_users,
+    testausid_users,
+    testaustime_users,
+    user_identities,
 );

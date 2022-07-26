@@ -45,6 +45,8 @@ pub enum TimeError {
     NotMember,
     #[error("There are no more admins left, you cannot leave")]
     LastAdmin,
+    #[error("Bad code")]
+    BadCode,
 }
 
 unsafe impl Send for TimeError {}
