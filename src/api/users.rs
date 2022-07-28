@@ -3,13 +3,15 @@ use actix_web::{
     web::{self, block, Data, Path, Query},
     HttpResponse, Responder,
 };
+use chrono::{Duration, Local};
 use serde_derive::Deserialize;
 
 use crate::{
-    database::{self, are_friends, get_activity, get_user_by_name},
+    database,
     error::TimeError,
     models::{UserId, UserIdentity},
     requests::DataRequest,
+    utils::group_by_language,
     DbPool,
 };
 
@@ -61,35 +63,70 @@ pub async fn get_activities(
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
-    if path.0 == "@me" {
-        let data = block(move || get_activity(&mut conn, data.into_inner(), user.id)).await??;
-        Ok(web::Json(data))
+
+    let data = if path.0 == "@me" {
+        block(move || database::get_activity(&mut conn, data.into_inner(), user.id)).await??
     } else {
-        let friend_id = get_user_by_name(&mut conn, &path.0)?.id;
+        let friend_id = database::get_user_by_name(&mut conn, &path.0)?.id;
+
         if friend_id == user.id {
             let mut conn = db.get()?;
-            let data =
-                block(move || get_activity(&mut conn, data.into_inner(), friend_id)).await??;
-            Ok(web::Json(data))
+            block(move || database::get_activity(&mut conn, data.into_inner(), friend_id)).await??
         } else {
-            match block(move || {
-                let mut conn = db.get()?;
-                are_friends(&mut conn, user.id, friend_id)
-            })
-            .await?
-            {
-                Ok(b) => {
-                    if b {
-                        let data =
-                            block(move || get_activity(&mut conn, data.into_inner(), friend_id))
-                                .await??;
-                        Ok(web::Json(data))
-                    } else {
-                        Err(TimeError::Unauthorized)
-                    }
-                }
-                Err(e) => Err(e),
+            if block(move || database::are_friends(&mut db.get()?, user.id, friend_id)).await?? {
+                block(move || database::get_activity(&mut conn, data.into_inner(), friend_id))
+                    .await??
+            } else {
+                return Err(TimeError::Unauthorized);
             }
         }
-    }
+    };
+
+    Ok(web::Json(data))
+}
+
+#[get("/users/{username}/activity/summary")]
+pub async fn get_activity_summary(
+    path: Path<(String,)>,
+    user: UserId,
+    db: Data<DbPool>,
+) -> Result<impl Responder, TimeError> {
+    let mut conn = db.get()?;
+    let data = if path.0 == "@me" {
+        block(move || database::get_all_activity(&mut conn, user.id)).await??
+    } else {
+        let friend_id = database::get_user_by_name(&mut conn, &path.0)?.id;
+
+        if friend_id == user.id {
+            let mut conn = db.get()?;
+            block(move || database::get_all_activity(&mut conn, friend_id)).await??
+        } else {
+            if block(move || database::are_friends(&mut db.get()?, user.id, friend_id)).await?? {
+                block(move || database::get_all_activity(&mut conn, friend_id)).await??
+            } else {
+                return Err(TimeError::Unauthorized);
+            }
+        }
+    };
+
+    let all_time = group_by_language(data.clone().into_iter());
+    let last_month = group_by_language(data.clone().into_iter().take_while(|d| {
+        Local::now()
+            .naive_local()
+            .signed_duration_since(d.start_time)
+            < Duration::days(30)
+    }));
+    let last_week = group_by_language(data.clone().into_iter().take_while(|d| {
+        Local::now()
+            .naive_local()
+            .signed_duration_since(d.start_time)
+            < Duration::days(7)
+    }));
+
+    let langs = serde_json::json!({
+        "last_week": last_week,
+        "last_month": last_month,
+        "all_time": all_time,
+    });
+    Ok(web::Json(langs))
 }

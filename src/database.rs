@@ -204,6 +204,16 @@ pub fn add_activity(
     Ok(())
 }
 
+pub fn get_all_activity(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    user: i32,
+) -> Result<Vec<CodingActivity>, TimeError> {
+    use crate::schema::coding_activities::dsl::*;
+    Ok(coding_activities
+        .filter(user_id.eq(user))
+        .load::<CodingActivity>(conn)?)
+}
+
 pub fn get_activity(
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     request: DataRequest,
@@ -232,7 +242,7 @@ pub fn get_activity(
     if let Some(min_duration) = request.min_duration {
         query = query.filter(duration.ge(min_duration));
     };
-    let res = query.load::<CodingActivity>(conn).unwrap();
+    let res = query.load::<CodingActivity>(conn)?;
     Ok(res)
 }
 

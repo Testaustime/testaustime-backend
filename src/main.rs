@@ -81,8 +81,7 @@ async fn main() -> std::io::Result<()> {
                 http::header::CONTENT_TYPE,
             ])
             .max_age(3600);
-        #[allow(clippy::let_and_return)]
-        let mut app = App::new()
+        let app = App::new()
             .wrap(cors)
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
@@ -129,6 +128,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::users::get_activities)
                     .service(api::users::delete_user)
                     .service(api::users::my_leaderboards)
+                    .service(api::users::get_activity_summary)
                     .service(api::leaderboards::create_leaderboard)
                     .service(api::leaderboards::get_leaderboard)
                     .service(api::leaderboards::join_leaderboard)
@@ -140,7 +140,6 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::regenerate_invite);
                 #[cfg(feature = "testausid")]
                 {
-                    let mut scope = scope;
                     scope.service(api::oauth::callback)
                 }
                 #[cfg(not(feature = "testausid"))]
@@ -152,7 +151,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(Data::clone(&heartbeat_store));
         #[cfg(feature = "testausid")]
         {
-            let mut app = app;
             app.app_data(Data::new(client))
         }
         #[cfg(not(feature = "testausid"))]
