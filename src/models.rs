@@ -20,7 +20,7 @@ pub struct RegisteredUser {
     pub registration_time: chrono::NaiveDateTime,
 }
 
-// This is here so that vilepis doesn't actually give friends eachothers auth tokens
+// This is here so that vilepis doesn't actually give friends each others' auth tokens
 #[derive(Clone, Debug, Serialize)]
 pub struct SelfUser {
     pub id: i32,
