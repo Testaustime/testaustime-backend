@@ -588,7 +588,7 @@ pub fn is_leaderboard_admin(
 }
 
 pub fn get_leaderboard_admin_count(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
 ) -> Result<i64, TimeError> {
     use crate::schema::leaderboard_members::dsl::*;
