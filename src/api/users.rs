@@ -109,6 +109,7 @@ pub async fn get_activity_summary(
         }
     };
 
+    //FIXME: This does a lot of unnecessary calculations
     let all_time = group_by_language(data.clone().into_iter());
     let last_month = group_by_language(data.clone().into_iter().take_while(|d| {
         Local::now()
@@ -124,9 +125,19 @@ pub async fn get_activity_summary(
     }));
 
     let langs = serde_json::json!({
-        "last_week": last_week,
-        "last_month": last_month,
-        "all_time": all_time,
+        "last_week": {
+            "languages": last_week,
+            "total": last_week.values().sum::<i32>(),
+        },
+        "last_month": {
+            "languages": last_month,
+            "total": last_month.values().sum::<i32>(),
+        },
+        "all_time": {
+            "languages": all_time,
+            "total": all_time.values().sum::<i32>(),
+        },
     });
+
     Ok(web::Json(langs))
 }
