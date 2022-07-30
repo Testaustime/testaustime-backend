@@ -14,6 +14,7 @@ pub struct UserIdentity {
     pub auth_token: String,
     pub friend_code: String,
     pub registration_time: chrono::NaiveDateTime,
+    pub is_public: bool,
 }
 
 #[derive(Queryable, Clone, Debug, Serialize)]

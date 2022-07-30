@@ -120,6 +120,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
                     .service(api::auth::changepassword)
+                    .service(api::account::change_settings)
                     .service(api::friends::add_friend)
                     .service(api::friends::get_friends)
                     .service(api::friends::regenerate_friend_code)

@@ -67,14 +67,15 @@ pub async fn get_activities(
     let data = if path.0 == "@me" {
         block(move || database::get_activity(&mut conn, data.into_inner(), user.id)).await??
     } else {
-        let friend_id = database::get_user_by_name(&mut conn, &path.0)?.id;
+        //FIXME: This is technically not required when the username equals the username of the
+        //authenticated user
+        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
 
-        if friend_id == user.id {
-            let mut conn = db.get()?;
-            block(move || database::get_activity(&mut conn, data.into_inner(), friend_id)).await??
+        if target_user.id == user.id || target_user.is_public {
+            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id)).await??
         } else {
-            if block(move || database::are_friends(&mut db.get()?, user.id, friend_id)).await?? {
-                block(move || database::get_activity(&mut conn, data.into_inner(), friend_id))
+            if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id)).await?? {
+                block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
                     .await??
             } else {
                 return Err(TimeError::Unauthorized);
@@ -95,14 +96,13 @@ pub async fn get_activity_summary(
     let data = if path.0 == "@me" {
         block(move || database::get_all_activity(&mut conn, user.id)).await??
     } else {
-        let friend_id = database::get_user_by_name(&mut conn, &path.0)?.id;
+        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
 
-        if friend_id == user.id {
-            let mut conn = db.get()?;
-            block(move || database::get_all_activity(&mut conn, friend_id)).await??
+        if target_user.id == user.id || target_user.is_public {
+            block(move || database::get_all_activity(&mut conn, target_user.id)).await??
         } else {
-            if block(move || database::are_friends(&mut db.get()?, user.id, friend_id)).await?? {
-                block(move || database::get_all_activity(&mut conn, friend_id)).await??
+            if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id)).await?? {
+                block(move || database::get_all_activity(&mut conn, target_user.id)).await??
             } else {
                 return Err(TimeError::Unauthorized);
             }

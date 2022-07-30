@@ -731,3 +731,13 @@ pub fn testausid_login(
         Ok(token)
     }
 }
+
+pub fn change_visibility(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    userid: i32,
+    visibility: bool,
+) -> Result<(), TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    diesel::update(user_identities.filter(id.eq(userid))).set(is_public.eq(visibility)).execute(conn)?;
+    Ok(())
+}

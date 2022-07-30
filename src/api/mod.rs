@@ -9,6 +9,7 @@ pub mod leaderboards;
 #[cfg(feature = "testausid")]
 pub mod oauth;
 pub mod users;
+pub mod account;
 
 static VALID_NAME_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("^[[:word:]]{2,32}$").unwrap());

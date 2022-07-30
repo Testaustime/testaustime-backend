@@ -62,6 +62,7 @@ table! {
         auth_token -> Bpchar,
         friend_code -> Bpchar,
         registration_time -> Timestamp,
+        is_public -> Bool,
     }
 }
 
