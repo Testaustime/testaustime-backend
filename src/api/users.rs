@@ -72,14 +72,15 @@ pub async fn get_activities(
         let target_user = database::get_user_by_name(&mut conn, &path.0)?;
 
         if target_user.id == user.id || target_user.is_public {
-            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id)).await??
+            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
+                .await??
+        } else if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
+            .await??
+        {
+            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
+                .await??
         } else {
-            if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id)).await?? {
-                block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
-                    .await??
-            } else {
-                return Err(TimeError::Unauthorized);
-            }
+            return Err(TimeError::Unauthorized);
         }
     };
 
@@ -100,12 +101,12 @@ pub async fn get_activity_summary(
 
         if target_user.id == user.id || target_user.is_public {
             block(move || database::get_all_activity(&mut conn, target_user.id)).await??
+        } else if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
+            .await??
+        {
+            block(move || database::get_all_activity(&mut conn, target_user.id)).await??
         } else {
-            if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id)).await?? {
-                block(move || database::get_all_activity(&mut conn, target_user.id)).await??
-            } else {
-                return Err(TimeError::Unauthorized);
-            }
+            return Err(TimeError::Unauthorized);
         }
     };
 
@@ -117,7 +118,7 @@ pub async fn get_activity_summary(
             .signed_duration_since(d.start_time)
             < Duration::days(30)
     }));
-    let last_week = group_by_language(data.clone().into_iter().take_while(|d| {
+    let last_week = group_by_language(data.into_iter().take_while(|d| {
         Local::now()
             .naive_local()
             .signed_duration_since(d.start_time)

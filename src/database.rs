@@ -738,6 +738,8 @@ pub fn change_visibility(
     visibility: bool,
 ) -> Result<(), TimeError> {
     use crate::schema::user_identities::dsl::*;
-    diesel::update(user_identities.filter(id.eq(userid))).set(is_public.eq(visibility)).execute(conn)?;
+    diesel::update(user_identities.filter(id.eq(userid)))
+        .set(is_public.eq(visibility))
+        .execute(conn)?;
     Ok(())
 }
