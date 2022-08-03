@@ -30,8 +30,10 @@ pub fn get_user_by_name(
     target_username: &str,
 ) -> Result<UserIdentity, TimeError> {
     use crate::schema::user_identities::dsl::*;
+    sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+
     Ok(user_identities
-        .filter(username.eq(target_username))
+        .filter(lower(username).eq(target_username.to_lowercase()))
         .first::<UserIdentity>(conn)?)
 }
 
