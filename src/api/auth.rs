@@ -118,7 +118,7 @@ pub async fn register(
 
     let mut conn = db.get()?;
     let username = data.username.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_err() {
+    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_ok() {
         return Err(TimeError::UserExists);
     }
 
@@ -141,7 +141,7 @@ pub async fn changeusername(
     }
     let mut conn = db.get()?;
     let username = data.new.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_err() {
+    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_ok() {
         return Err(TimeError::UserExists);
     }
 
