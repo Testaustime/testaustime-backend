@@ -10,7 +10,7 @@ use actix_web::{
 use crate::{
     database::{
         change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
-        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password,
+        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password, self,
     },
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
@@ -115,6 +115,13 @@ pub async fn register(
     if !super::VALID_NAME_REGEX.is_match(&data.username) {
         return Err(TimeError::BadUsername);
     }
+
+    let mut conn = db.get()?;
+    let username = data.username.clone();
+    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_err() {
+        return Err(TimeError::UserExists);
+    }
+
     Ok(Json(
         block(move || new_testaustime_user(&mut db.get()?, &data.username, &data.password))
             .await??,
@@ -131,6 +138,11 @@ pub async fn changeusername(
         return Err(TimeError::InvalidLength(
             "Username is not between 2 and 32 chars".to_string(),
         ));
+    }
+    let mut conn = db.get()?;
+    let username = data.new.clone();
+    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_err() {
+        return Err(TimeError::UserExists);
     }
 
     let mut conn = db.get()?;
