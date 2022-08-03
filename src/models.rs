@@ -9,10 +9,10 @@ pub struct UserId {
 #[derive(Queryable, Clone, Debug, Serialize)]
 pub struct UserIdentity {
     pub id: i32,
-    pub username: String,
     #[serde(skip_serializing)]
     pub auth_token: String,
     pub friend_code: String,
+    pub username: String,
     pub registration_time: chrono::NaiveDateTime,
     pub is_public: bool,
 }

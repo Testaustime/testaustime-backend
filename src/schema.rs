@@ -58,9 +58,9 @@ table! {
 table! {
     user_identities (id) {
         id -> Int4,
-        username -> Varchar,
         auth_token -> Bpchar,
         friend_code -> Bpchar,
+        username -> Varchar,
         registration_time -> Timestamp,
         is_public -> Bool,
     }
