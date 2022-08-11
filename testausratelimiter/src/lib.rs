@@ -13,8 +13,13 @@ use actix_web::{
 };
 use futures_util::{future::LocalBoxFuture, stream::once};
 
+pub struct RateLimitInfo {
+    pub request_count: usize,
+    pub last_reset: Instant,
+}
+
 pub struct RateLimiterStorage {
-    pub clients: HashMap<String, (usize, Instant)>,
+    pub clients: HashMap<String, RateLimitInfo>,
     pub maxrpm: usize,
     pub reset_interval: usize,
     event_count: usize,
@@ -59,7 +64,7 @@ impl Handler<ClearRequest> for RateLimiterStorage {
     fn handle(&mut self, _: ClearRequest, _: &mut Context<Self>) {
         let cur_time = Instant::now();
         self.clients
-            .retain(|_, (_, time)| cur_time.duration_since(*time) < Duration::from_secs(1800));
+            .retain(|_, i| cur_time.duration_since(i.last_reset) < Duration::from_secs(1800));
     }
 }
 
@@ -81,29 +86,29 @@ impl Handler<IpRequest> for RateLimiterStorage {
         } else {
             self.event_count += 1;
         };
-        if let Some((r, s)) = self.clients.get_mut(&req.ip) {
+        if let Some(rlinfo) = self.clients.get_mut(&req.ip) {
             let time = Instant::now();
-            let duration = (*s).duration_since(time);
+            let duration = (rlinfo.last_reset).duration_since(time);
             if duration == Duration::from_secs(0) {
-                *r = 1;
-                *s = time + Duration::from_secs(self.reset_interval as u64);
+                rlinfo.request_count = 1;
+                rlinfo.last_reset = time + Duration::from_secs(self.reset_interval as u64);
                 Ok((
-                    Some(self.maxrpm - *r),
+                    Some(self.maxrpm - rlinfo.request_count),
                     Duration::from_secs(self.reset_interval as u64),
                 ))
-            } else if *r as usize >= self.maxrpm {
+            } else if rlinfo.request_count as usize >= self.maxrpm {
                 Ok((None, duration))
             } else {
-                *r += 1;
-                Ok((Some(self.maxrpm - *r), duration))
+                rlinfo.request_count += 1;
+                Ok((Some(self.maxrpm - rlinfo.request_count), duration))
             }
         } else {
             self.clients.insert(
                 req.ip,
-                (
-                    1,
-                    std::time::Instant::now() + Duration::from_secs(self.reset_interval as u64),
-                ),
+                RateLimitInfo {
+                    request_count: 1,
+                    last_reset: std::time::Instant::now() + Duration::from_secs(self.reset_interval as u64),
+                }
             );
             Ok((
                 Some(self.maxrpm - 1),
