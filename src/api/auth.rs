@@ -9,8 +9,8 @@ use actix_web::{
 
 use crate::{
     database::{
-        change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
-        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password, self,
+        self, change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
+        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password,
     },
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
@@ -118,7 +118,10 @@ pub async fn register(
 
     let mut conn = db.get()?;
     let username = data.username.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_ok() {
+    if block(move || database::get_user_by_name(&mut conn, &username))
+        .await?
+        .is_ok()
+    {
         return Err(TimeError::UserExists);
     }
 
@@ -141,7 +144,10 @@ pub async fn changeusername(
     }
     let mut conn = db.get()?;
     let username = data.new.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username)).await?.is_ok() {
+    if block(move || database::get_user_by_name(&mut conn, &username))
+        .await?
+        .is_ok()
+    {
         return Err(TimeError::UserExists);
     }
 

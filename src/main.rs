@@ -95,6 +95,7 @@ async fn main() -> std::io::Result<()> {
                         reset_interval: 60,
                     })
                     .service(api::activity::update)
+                    .service(api::activity::delete)
                     .service(api::activity::flush),
             )
             .service(
@@ -115,7 +116,6 @@ async fn main() -> std::io::Result<()> {
                         maxrpm: max_requests,
                         reset_interval: 60,
                     })
-                    .service(api::activity::delete)
                     .service(api::auth::login)
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
