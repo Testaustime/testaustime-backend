@@ -556,28 +556,20 @@ Deletes selected code session
   
 | Param | Type | Description | 
 | --- | --- | --- | 
-| raw text | string | Maybe userid, maybe activity id, maybe something else, idk |
+| raw text | string | Activity id from response [`GET /users/{username}/activity/data`](#activity_data) |
 </details> 
 
 **Sample request** 
 ```curl
 curl --request DELETE 'https://testaustime.fi/api/activity/delete' \
 --header 'Authorization: Bearer <token>' \
---data-raw '?'
+--data-raw 'activity_id'
 ```
 
 **Sample response** 
 ```HTTP
 200 OK
 ```
-
-<details>
-  <summary>Error examples:</summary>
-  
-| Error | Error code | Body | 
-| --- | --- | --- | 
-| - | 404 Not Found | - | 
-</details> 
 
 ## <a name="friends"></a>  Friends
 
@@ -617,7 +609,7 @@ Adds the holder of the friend token as a friend of the authenticating user
 ```curl
 curl --request POST 'https://testaustime.fi/api/friends/add' \
 --header 'Authorization: Bearer <token>' \
---data-raw '<friend_code>'
+--data-raw 'friend_code'
 ```
     
 **Sample response** 
@@ -1127,8 +1119,6 @@ curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/promote' \
 #### <a name="demote_lb"></a>  [8. POST /leaderboards/{name}/demote](#leaderboards)
 
 Demotes admin to regular member in the leaderboard if authorized user has admin rights. Be careful of promoting users, root admin (creator of the leaderboard) can be demoted as a promoted one
-
->*This request is idempotent, it means that you can demote user that is already regular and have in response 200 OK*
     
 <details>
   <summary>Header params:</summary>
@@ -1184,8 +1174,6 @@ curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/demote' \
 #### <a name="kick_lb"></a>  [9. POST /leaderboards/{name}/kick](#leaderboards)
 
 Kicks user from leaderboard if authorized user has admin rights
-
->*This request is idempotent, it means that you can demote user that is already regular and have in response 200 OK*
     
 <details>
   <summary>Header params:</summary>
