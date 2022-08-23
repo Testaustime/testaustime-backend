@@ -9,7 +9,7 @@ Testaustime API gives 5 different routes:
 - [/friends/](#friends)
 - [/leaderboards/](#leaderboards)
 
-Basic path: `https://testaustime.fi/api`
+Basic path: `https://api.testaustime.fi` 
 
 Limits: 
 - Usual Ratelimit: 10 req/m.
@@ -51,7 +51,7 @@ Creating a new user and returns the user auth token, friend code and registratio
 
 **Sample request**
 ```curl
-curl --request POST https://testaustime.fi/api/auth/register' \
+curl --request POST https://api.testaustime.fi/auth/register' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "username": "username",
@@ -102,7 +102,7 @@ Logins to a users account and returning the auth token
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/auth/login' \
+curl --request POST 'https://api.testaustime.fi/auth/login' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "username": "username",
@@ -156,7 +156,7 @@ Changes username
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/auth/changeusername' \
+curl --request POST 'https://api.testaustime.fi/auth/changeusername' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <token> '{
     "new": "new_username"
@@ -200,7 +200,7 @@ Changes users password
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/auth/changepassword' \
+curl --request POST 'https://api.testaustime.fi/auth/changepassword' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <token>' \
 --data-raw '{
@@ -237,7 +237,7 @@ Regenerates users auth token
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/auth/regenerate' \
+curl --request POST 'https://api.testaustime.fi/auth/regenerate' \
 --header 'Content-Type: application/json'
 ```
     
@@ -283,7 +283,7 @@ Gets data about authorized user
 
 **Sample request**
 ```curl
-curl --location --request GET 'https://testaustime.fi/api/users/@me' \
+curl --location --request GET 'https://api.testaustime.fi/users/@me' \
 --header 'Authorization: Bearer `<token>`'
 ```
     
@@ -321,7 +321,7 @@ Gets list of user leaderboards
 
 **Sample request**
 ```curl
-curl --location --request GET 'https://testaustime.fi/api/users/@me/leaderboards' \
+curl --location --request GET 'https://api.testaustime.fi/users/@me/leaderboards' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -366,7 +366,7 @@ Geting user or user friend coding activity data
 
 **Sample request**
 ```curl
-curl --location --request GET 'https://testaustime.fi/api/users/@me/activity/data' \
+curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/data' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -422,7 +422,7 @@ Deletes user account
 
 **Sample request**
 ```curl
-curl --request DELETE 'https://testaustime.fi/api/users/@me/delete' \
+curl --request DELETE 'https://api.testaustime.fi/users/@me/delete' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "username": "username",
@@ -478,7 +478,7 @@ Main endpoint of the service. Creates code session and logs current activity in 
 If the user doesn't have any active code session with this set of body params, then first request `POST /activity/update` creates new code session. Any other code session automatically stops/flushes after starting new one, so the user can't have >1 active code sessions in one time 
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/activity/update' \
+curl --request POST 'https://api.testaustime.fi/activity/update' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
@@ -497,7 +497,7 @@ curl --request POST 'https://testaustime.fi/api/activity/update' \
 **Sample next request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/activity/update' \
+curl --request POST 'https://api.testaustime.fi/activity/update' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
@@ -530,7 +530,7 @@ Flushes/stops any currently active coding session
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/activity/flush' \
+curl --request POST 'https://api.testaustime.fi/activity/flush' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -561,7 +561,7 @@ Deletes selected code session
 
 **Sample request** 
 ```curl
-curl --request DELETE 'https://testaustime.fi/api/activity/delete' \
+curl --request DELETE 'https://api.testaustime.fi/activity/delete' \
 --header 'Authorization: Bearer <token>' \
 --data-raw 'activity_id'
 ```
@@ -607,7 +607,7 @@ Adds the holder of the friend token as a friend of the authenticating user
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/friends/add' \
+curl --request POST 'https://api.testaustime.fi/friends/add' \
 --header 'Authorization: Bearer <token>' \
 --data-raw 'friend_code'
 ```
@@ -641,7 +641,7 @@ Gets a list of added user friends
 **Sample request**
 
 ```curl
-curl --request GET 'https://testaustime.fi/api/friends/list' \
+curl --request GET ''https://api.testaustime.fi/friends/list' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -685,7 +685,7 @@ Regenerates the authorized user's friend code
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/friends/regenerate' \
+curl --request POST 'https://api.testaustime.fi/friends/regenerate' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -726,7 +726,7 @@ Removes another user from your friend list
 
 **Sample request** 
 ```curl 
---location --request DELETE 'https://testaustime.fi/api/activity/delete' \
+curl --request DELETE 'https://api.testaustime.fi/friends/remove' \
 --header 'Authorization: Bearer <token>' \
 --data-raw 'username'
 ```
@@ -777,7 +777,7 @@ Adds new leaderboard
 
 **Sample request**
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/create' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/create' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
@@ -831,7 +831,7 @@ Joins leaderboard by it's invite code
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/join' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/join' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
@@ -889,7 +889,7 @@ Gets info about leaderboard if authorized user is a member
 **Sample request**
 
 ```curl
-curl --request GET 'https://testaustime.fi/api/leaderboards/<name>' \
+curl --request GET 'https://api.testaustime.fi/leaderboards/{name}' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -956,7 +956,7 @@ Deletes leaderboard if authorized user has admin rights
 **Sample request**
 
 ```curl
-curl --request DELETE 'https://testaustime.fi/api/leaderboards/{name}' \
+curl --request DELETE 'https://api.testaustime.fi/leaderboards/{name}' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -997,7 +997,7 @@ Leaves the leaderboard
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/leave' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/leave' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -1039,7 +1039,7 @@ Regenerates invite code of the leaderboard if authorized user has admin rights
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/regenerate' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/regenerate' \
 --header 'Authorization: Bearer <token>'
 ```
     
@@ -1094,7 +1094,7 @@ Promotes member of a leaderboard to admin if authorized user has admin rights. B
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/promote' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/promote' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <token>' \
 --data-raw '{
@@ -1148,7 +1148,7 @@ Demotes admin to regular member in the leaderboard if authorized user has admin 
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/demote' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/demote' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <token>' \
 --data-raw '{
@@ -1203,7 +1203,7 @@ Kicks user from leaderboard if authorized user has admin rights
 **Sample request**
 
 ```curl
-curl --request POST 'https://testaustime.fi/api/leaderboards/{name}/kick' \
+curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/kick' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer <token>' \
 --data-raw '{
