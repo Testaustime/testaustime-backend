@@ -107,8 +107,9 @@ impl Handler<IpRequest> for RateLimiterStorage {
                 req.ip,
                 RateLimitInfo {
                     request_count: 1,
-                    last_reset: std::time::Instant::now() + Duration::from_secs(self.reset_interval as u64),
-                }
+                    last_reset: std::time::Instant::now()
+                        + Duration::from_secs(self.reset_interval as u64),
+                },
             );
             Ok((
                 Some(self.maxrpm - 1),
