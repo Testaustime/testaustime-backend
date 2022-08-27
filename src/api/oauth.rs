@@ -58,7 +58,7 @@ async fn callback(
     }
 
     let res = client
-        .post("http://localhost:6969/api/v1/token")
+        .post("http://id.testausserveri.fi/api/v1/token")
         .insert_header(("content-type", "application/x-www-form-urlencoded"))
         .send_form(&HashMap::from([
             ("code", &request.code),
@@ -73,7 +73,7 @@ async fn callback(
         .unwrap();
 
     let res = client
-        .get("http://localhost:6969/api/v1/me")
+        .get("http://id.testausserveri.fi/api/v1/me")
         .insert_header(("Authorization", format!("Bearer {}", res.token)))
         .send()
         .await

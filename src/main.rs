@@ -1,11 +1,11 @@
 #![feature(let_else, once_cell)]
 
 mod api;
-pub mod database;
+mod database;
 mod error;
-pub mod models;
+mod models;
 mod requests;
-pub mod schema;
+mod schema;
 mod utils;
 
 use actix::prelude::*;

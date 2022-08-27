@@ -12,7 +12,6 @@ pub struct UserSearch {
 }
 
 //TODO: Maybe return small coding summary?
-//FIXME: The error when missing `keyword` is ugly, go fix
 #[get("/search/users")]
 pub async fn search_public_users(
     db: Data<DbPool>,

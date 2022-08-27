@@ -71,11 +71,10 @@ pub async fn get_activities(
         //authenticated user
         let target_user = database::get_user_by_name(&mut conn, &path.0)?;
 
-        if target_user.id == user.id || target_user.is_public {
-            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
+        if target_user.id == user.id
+            || target_user.is_public
+            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
                 .await??
-        } else if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-            .await??
         {
             block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
                 .await??
@@ -99,10 +98,10 @@ pub async fn get_activity_summary(
     } else {
         let target_user = database::get_user_by_name(&mut conn, &path.0)?;
 
-        if target_user.id == user.id || target_user.is_public {
-            block(move || database::get_all_activity(&mut conn, target_user.id)).await??
-        } else if block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-            .await??
+        if target_user.id == user.id
+            || target_user.is_public
+            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
+                .await??
         {
             block(move || database::get_all_activity(&mut conn, target_user.id)).await??
         } else {

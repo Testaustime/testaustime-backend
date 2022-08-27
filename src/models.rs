@@ -56,7 +56,6 @@ pub struct NewTestaustimeUser {
     pub identity: i32,
 }
 
-
 // This is here so that vilepis doesn't actually give friends each others' auth tokens
 // Fuck off
 #[derive(Clone, Debug, Serialize)]
