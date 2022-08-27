@@ -7,20 +7,57 @@ pub struct UserId {
 }
 
 #[derive(Queryable, Clone, Debug, Serialize)]
-pub struct RegisteredUser {
+pub struct UserIdentity {
     pub id: i32,
     #[serde(skip_serializing)]
     pub auth_token: String,
     pub friend_code: String,
     pub username: String,
+    pub registration_time: chrono::NaiveDateTime,
+    pub is_public: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct PublicUser {
+    pub id: i32,
+    pub username: String,
+    pub registration_time: chrono::NaiveDateTime,
+}
+
+impl From<UserIdentity> for PublicUser {
+    fn from(user_identity: UserIdentity) -> PublicUser {
+        PublicUser {
+            id: user_identity.id,
+            username: user_identity.username,
+            registration_time: user_identity.registration_time,
+        }
+    }
+}
+
+#[derive(Queryable, Clone, Debug, Serialize)]
+pub struct TestaustimeUser {
+    pub id: i32,
     #[serde(skip_serializing)]
     pub password: Vec<u8>,
     #[serde(skip_serializing)]
     pub salt: Vec<u8>,
-    pub registration_time: chrono::NaiveDateTime,
+    pub identity: i32,
+}
+
+use crate::schema::testaustime_users;
+
+#[derive(Insertable, Serialize, Clone)]
+#[diesel(table_name = testaustime_users)]
+pub struct NewTestaustimeUser {
+    #[serde(skip_serializing)]
+    pub password: Vec<u8>,
+    #[serde(skip_serializing)]
+    pub salt: Vec<u8>,
+    pub identity: i32,
 }
 
 // This is here so that vilepis doesn't actually give friends each others' auth tokens
+// Fuck off
 #[derive(Clone, Debug, Serialize)]
 pub struct SelfUser {
     pub id: i32,
@@ -30,8 +67,8 @@ pub struct SelfUser {
     pub registration_time: chrono::NaiveDateTime,
 }
 
-impl From<RegisteredUser> for SelfUser {
-    fn from(u: RegisteredUser) -> SelfUser {
+impl From<UserIdentity> for SelfUser {
+    fn from(u: UserIdentity) -> SelfUser {
         SelfUser {
             id: u.id,
             auth_token: u.auth_token,
@@ -42,18 +79,35 @@ impl From<RegisteredUser> for SelfUser {
     }
 }
 
-use crate::schema::registered_users;
+#[cfg(feature = "testausid")]
+use crate::schema::testausid_users;
+
+#[cfg(feature = "testausid")]
+#[derive(Insertable, Serialize, Clone)]
+#[diesel(table_name = testausid_users)]
+pub struct NewTestausIdUser {
+    pub user_id: String,
+    pub service_id: String,
+    pub identity: i32,
+}
+
+#[cfg(feature = "testausid")]
+#[derive(Queryable, Serialize, Clone)]
+pub struct TestausIdUser {
+    pub id: i32,
+    pub user_id: String,
+    pub service_id: String,
+    pub identity: i32,
+}
+
+use crate::schema::user_identities;
 
 #[derive(Insertable, Serialize, Clone)]
-#[table_name = "registered_users"]
-pub struct NewRegisteredUser {
+#[diesel(table_name = user_identities)]
+pub struct NewUserIdentity {
     pub auth_token: String,
     pub username: String,
     pub friend_code: String,
-    #[serde(skip_serializing)]
-    pub password: Vec<u8>,
-    #[serde(skip_serializing)]
-    pub salt: Vec<u8>,
     pub registration_time: chrono::NaiveDateTime,
 }
 
@@ -67,7 +121,7 @@ pub struct FriendRelation {
 use crate::schema::friend_relations;
 
 #[derive(Insertable)]
-#[table_name = "friend_relations"]
+#[diesel(table_name = friend_relations)]
 pub struct NewFriendRelation {
     pub lesser_id: i32,
     pub greater_id: i32,
@@ -89,7 +143,7 @@ pub struct CodingActivity {
 use crate::schema::coding_activities;
 
 #[derive(Insertable)]
-#[table_name = "coding_activities"]
+#[diesel(table_name = coding_activities)]
 pub struct NewCodingActivity {
     pub user_id: i32,
     pub start_time: chrono::NaiveDateTime,
@@ -111,7 +165,7 @@ pub struct Leaderboard {
 use crate::schema::leaderboards;
 
 #[derive(Insertable)]
-#[table_name = "leaderboards"]
+#[diesel(table_name = leaderboards)]
 pub struct NewLeaderboard {
     pub name: String,
     pub invite_code: String,
@@ -129,7 +183,7 @@ pub struct LeaderboardMember {
 use crate::schema::leaderboard_members;
 
 #[derive(Insertable)]
-#[table_name = "leaderboard_members"]
+#[diesel(table_name = leaderboard_members)]
 pub struct NewLeaderboardMember {
     pub leaderboard_id: i32,
     pub user_id: i32,

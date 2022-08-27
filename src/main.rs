@@ -3,14 +3,22 @@
 mod api;
 mod database;
 mod error;
-pub mod models;
+mod models;
 mod requests;
-pub mod schema;
+mod schema;
 mod utils;
 
 use actix::prelude::*;
 use actix_cors::Cors;
-use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
+use actix_web::{
+    error::{ErrorBadRequest, QueryPayloadError},
+    middleware::Logger,
+    web,
+    web::{Data, QueryConfig},
+    App, HttpServer,
+};
+#[cfg(feature = "testausid")]
+use awc::Client;
 use diesel::{r2d2::ConnectionManager, PgConnection};
 use r2d2::Pool;
 use serde_derive::Deserialize;
@@ -67,6 +75,8 @@ async fn main() -> std::io::Result<()> {
     let registers_ratelimiter = RateLimiterStorage::new(max_registers, 86400).start();
 
     HttpServer::new(move || {
+        #[cfg(feature = "testausid")]
+        let client = Client::new();
         let cors = Cors::default()
             .allowed_origin(&config.allowed_origin)
             .allowed_origin("https://testaustime.fi")
@@ -77,7 +87,14 @@ async fn main() -> std::io::Result<()> {
                 http::header::CONTENT_TYPE,
             ])
             .max_age(3600);
-        App::new()
+        let query_config = QueryConfig::default().error_handler(|err, _| match err {
+            QueryPayloadError::Deserialize(e) => {
+                ErrorBadRequest(json!({ "error": format!("{}", e) }))
+            }
+            _ => unreachable!(),
+        });
+        let app = App::new()
+            .app_data(query_config)
             .wrap(cors)
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
@@ -91,6 +108,7 @@ async fn main() -> std::io::Result<()> {
                         reset_interval: 60,
                     })
                     .service(api::activity::update)
+                    .service(api::activity::delete)
                     .service(api::activity::flush),
             )
             .service(
@@ -103,19 +121,19 @@ async fn main() -> std::io::Result<()> {
                     })
                     .route(web::post().to(api::auth::register)),
             )
-            .service(
-                web::scope("")
+            .service({
+                let scope = web::scope("")
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
                         maxrpm: max_requests,
                         reset_interval: 60,
                     })
-                    .service(api::activity::delete)
                     .service(api::auth::login)
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
                     .service(api::auth::changepassword)
+                    .service(api::account::change_settings)
                     .service(api::friends::add_friend)
                     .service(api::friends::get_friends)
                     .service(api::friends::regenerate_friend_code)
@@ -124,6 +142,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::users::get_activities)
                     .service(api::users::delete_user)
                     .service(api::users::my_leaderboards)
+                    .service(api::users::get_activity_summary)
                     .service(api::leaderboards::create_leaderboard)
                     .service(api::leaderboards::get_leaderboard)
                     .service(api::leaderboards::join_leaderboard)
@@ -132,10 +151,27 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::promote_member)
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
-                    .service(api::leaderboards::regenerate_invite),
-            )
+                    .service(api::leaderboards::regenerate_invite)
+                    .service(api::search::search_public_users);
+                #[cfg(feature = "testausid")]
+                {
+                    scope.service(api::oauth::callback)
+                }
+                #[cfg(not(feature = "testausid"))]
+                {
+                    scope
+                }
+            })
             .app_data(Data::clone(&pool))
-            .app_data(Data::clone(&heartbeat_store))
+            .app_data(Data::clone(&heartbeat_store));
+        #[cfg(feature = "testausid")]
+        {
+            app.app_data(Data::new(client))
+        }
+        #[cfg(not(feature = "testausid"))]
+        {
+            app
+        }
     })
     .bind(config.address)?
     .run()

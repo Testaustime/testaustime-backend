@@ -1,22 +1,26 @@
 [package]
 name = "testaustime-rs"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Ville Järvinen <jarvinenville606@gmail.com>", "Luukas Pörtfors <lajp@iki.fi>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["testausid"]
+testausid = ["dep:awc"]
+
 [profile.release]
 lto = true
 
 [dependencies]
-actix-web = { version = "4.0.1", features = ["macros","openssl"] }
+actix-web = { version = "4.0.1", features = ["macros", "rustls"] }
 actix = "0.13"
-awc = "3.0.0-beta.21"
+awc = { version = "3.0.0", features = ["rustls"], optional = true }
 actix-cors = "0.6"
 http = "0.2"
 regex = "1.5"
 
-diesel = { version = "1.4.8", features = ["postgres", "chrono", "r2d2"] }
+diesel = { version = "2.0.0-rc.0", features = ["postgres", "chrono", "r2d2", "serde_json"] }
 r2d2 = "0.8"
 
 log = "0.4"
@@ -35,10 +39,11 @@ toml = "0.5"
 futures = "0.3"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
-dashmap = "5.1"
-argon2 = "0.3.4"
+dashmap = "5.2"
+argon2 = "0.4"
 rand = "0.8"
 dotenv = "0.15"
 url = "2.2"
 
 testausratelimiter = { path = "testausratelimiter" }
+itertools = "0.10.3"

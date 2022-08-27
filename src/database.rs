@@ -14,57 +14,61 @@ use crate::{
 };
 
 fn user_exists(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     target_username: &str,
 ) -> Result<bool, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    Ok(registered_users
+    use crate::schema::user_identities::dsl::*;
+    Ok(user_identities
         .filter(username.eq(target_username))
-        .first::<RegisteredUser>(conn)
+        .first::<UserIdentity>(conn)
         .optional()?
         .is_some())
 }
 
 pub fn get_user_by_name(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     target_username: &str,
-) -> Result<RegisteredUser, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    Ok(registered_users
-        .filter(username.eq(target_username))
-        .first::<RegisteredUser>(conn)?)
+) -> Result<UserIdentity, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+
+    Ok(user_identities
+        .filter(lower(username).eq(target_username.to_lowercase()))
+        .first::<UserIdentity>(conn)?)
 }
 
 pub fn delete_user(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     userid: i32,
 ) -> Result<bool, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    Ok(diesel::delete(registered_users.filter(id.eq(userid))).execute(conn)? > 0)
+    use crate::schema::user_identities::dsl::*;
+    Ok(diesel::delete(user_identities.filter(id.eq(userid))).execute(conn)? > 0)
 }
 
 pub fn get_user_by_id(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     userid: i32,
-) -> Result<RegisteredUser, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    Ok(registered_users
+) -> Result<UserIdentity, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    Ok(user_identities
         .filter(id.eq(userid))
-        .first::<RegisteredUser>(conn)?)
+        .first::<UserIdentity>(conn)?)
 }
 
 pub fn verify_user_password(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     username: &str,
     password: &str,
-) -> Result<Option<RegisteredUser>, TimeError> {
+) -> Result<Option<UserIdentity>, TimeError> {
     let user = get_user_by_name(conn, username)?;
+    let tuser = get_testaustime_user_by_id(conn, user.id)?;
+
     let argon2 = Argon2::default();
-    let Ok(salt) = SaltString::new(std::str::from_utf8(&user.salt).unwrap()) else {
+    let Ok(salt) = SaltString::new(std::str::from_utf8(&tuser.salt).unwrap()) else {
         return Ok(None); // The user has no password
     };
     let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
-    if password_hash.hash.unwrap().as_bytes() == user.password {
+    if password_hash.hash.unwrap().as_bytes() == tuser.password {
         Ok(Some(user))
     } else {
         Ok(None)
@@ -72,23 +76,24 @@ pub fn verify_user_password(
 }
 
 pub fn regenerate_token(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     userid: i32,
 ) -> Result<String, TimeError> {
     let token = crate::utils::generate_token();
-    use crate::schema::registered_users::dsl::*;
-    diesel::update(crate::schema::registered_users::table)
+    use crate::schema::user_identities::dsl::*;
+    diesel::update(crate::schema::user_identities::table)
         .filter(id.eq(userid))
         .set(auth_token.eq(&token))
         .execute(conn)?;
     Ok(token)
 }
 
-pub fn new_user(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+pub fn new_testaustime_user(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     username: &str,
     password: &str,
-) -> Result<NewRegisteredUser, TimeError> {
+) -> Result<NewUserIdentity, TimeError> {
+    use crate::schema::{testaustime_users, user_identities};
     if user_exists(conn, username)? {
         return Err(TimeError::UserExists);
     }
@@ -97,31 +102,41 @@ pub fn new_user(
     let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
     let token = generate_token();
     let hash = password_hash.hash.unwrap();
-    let new_user = NewRegisteredUser {
+    let new_user = NewUserIdentity {
         auth_token: token,
         registration_time: chrono::Local::now().naive_local(),
         username: username.to_string(),
         friend_code: generate_friend_code(),
+    };
+    let id = diesel::insert_into(crate::schema::user_identities::table)
+        .values(&new_user)
+        .returning(user_identities::id)
+        .get_results::<i32>(conn)
+        .map_err(|_| TimeError::UserExists)?;
+
+    let testaustime_user = NewTestaustimeUser {
         password: hash.as_bytes().to_vec(),
         salt: salt.as_bytes().to_vec(),
+        identity: id[0],
     };
-    diesel::insert_into(crate::schema::registered_users::table)
-        .values(&new_user)
-        .execute(conn)
-        .map_err(|_| TimeError::UserExists)?;
+
+    diesel::insert_into(testaustime_users::table)
+        .values(&testaustime_user)
+        .execute(conn)?;
+
     Ok(new_user)
 }
 
 pub fn change_username(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     new_username: &str,
 ) -> Result<(), TimeError> {
     if user_exists(conn, new_username)? {
         return Err(TimeError::UserExists);
     }
-    use crate::schema::registered_users::dsl::*;
-    diesel::update(crate::schema::registered_users::table)
+    use crate::schema::user_identities::dsl::*;
+    diesel::update(crate::schema::user_identities::table)
         .filter(id.eq(user))
         .set(username.eq(new_username))
         .execute(conn)
@@ -130,7 +145,7 @@ pub fn change_username(
 }
 
 pub fn change_password(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     new_password: &str,
 ) -> Result<(), TimeError> {
@@ -140,9 +155,9 @@ pub fn change_password(
         .hash_password(new_password.as_bytes(), &new_salt)
         .unwrap();
     let new_hash = password_hash.hash.unwrap();
-    use crate::schema::registered_users::dsl::*;
-    diesel::update(crate::schema::registered_users::table)
-        .filter(id.eq(user))
+    use crate::schema::testaustime_users::dsl::*;
+    diesel::update(crate::schema::testaustime_users::table)
+        .filter(identity.eq(user))
         .set((
             password.eq(&new_hash.as_bytes()),
             salt.eq(new_salt.as_bytes()),
@@ -152,18 +167,18 @@ pub fn change_password(
 }
 
 pub fn get_user_by_token(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     token: &str,
-) -> Result<RegisteredUser, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    let user = registered_users
+) -> Result<UserIdentity, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    let user = user_identities
         .filter(auth_token.eq(token))
-        .first::<RegisteredUser>(conn)?;
+        .first::<UserIdentity>(conn)?;
     Ok(user)
 }
 
 pub fn add_activity(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     updated_user_id: i32,
     heartbeat: HeartBeat,
     ctx_start_time: NaiveDateTime,
@@ -191,8 +206,18 @@ pub fn add_activity(
     Ok(())
 }
 
+pub fn get_all_activity(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    user: i32,
+) -> Result<Vec<CodingActivity>, TimeError> {
+    use crate::schema::coding_activities::dsl::*;
+    Ok(coding_activities
+        .filter(user_id.eq(user))
+        .load::<CodingActivity>(conn)?)
+}
+
 pub fn get_activity(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     request: DataRequest,
     user: i32,
 ) -> Result<Vec<CodingActivity>, TimeError> {
@@ -219,33 +244,32 @@ pub fn get_activity(
     if let Some(min_duration) = request.min_duration {
         query = query.filter(duration.ge(min_duration));
     };
-    let res = query.load::<CodingActivity>(conn).unwrap();
+    let res = query.load::<CodingActivity>(conn)?;
     Ok(res)
 }
 
 pub fn add_friend(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     friend: &str,
-) -> Result<RegisteredUser, TimeError> {
-    use crate::schema::registered_users::dsl::*;
-    let Some(friend) = registered_users
-    .filter(friend_code.eq(friend))
-    .first::<RegisteredUser>(conn)
-    .optional()? else {
+) -> Result<UserIdentity, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    let Some(friend) = user_identities
+        .filter(friend_code.eq(friend))
+        .first::<UserIdentity>(conn)
+        .optional()?
+    else {
         return Err(TimeError::UserNotFound)
     };
 
-    let friend_id = friend.id;
-
-    if friend_id == user {
+    if friend.id == user {
         return Err(TimeError::CurrentUser);
     }
 
-    let (lesser, greater) = if user < friend_id {
-        (user, friend_id)
+    let (lesser, greater) = if user < friend.id {
+        (user, friend.id)
     } else {
-        (friend_id, user)
+        (friend.id, user)
     };
 
     insert_into(crate::schema::friend_relations::table)
@@ -258,12 +282,12 @@ pub fn add_friend(
 }
 
 pub fn get_friends(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
-) -> Result<Vec<RegisteredUser>, TimeError> {
+) -> Result<Vec<UserIdentity>, TimeError> {
     use crate::schema::{
         friend_relations::dsl::{friend_relations, greater_id, lesser_id},
-        registered_users::dsl::*,
+        user_identities::dsl::*,
     };
     let friends = friend_relations
         .filter(greater_id.eq(user).or(lesser_id.eq(user)))
@@ -283,9 +307,9 @@ pub fn get_friends(
             },
         )
         .filter_map(|cur_friend| {
-            registered_users
+            user_identities
                 .filter(id.eq(cur_friend))
-                .first::<RegisteredUser>(conn)
+                .first::<UserIdentity>(conn)
                 .ok()
         })
         .collect();
@@ -293,7 +317,7 @@ pub fn get_friends(
 }
 
 pub fn are_friends(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     friend_id: i32,
 ) -> Result<bool, TimeError> {
@@ -311,7 +335,7 @@ pub fn are_friends(
 }
 
 pub fn remove_friend(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     user: i32,
     friend_id: i32,
 ) -> Result<bool, TimeError> {
@@ -328,12 +352,12 @@ pub fn remove_friend(
 }
 
 pub fn regenerate_friend_code(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     userid: i32,
 ) -> Result<String, TimeError> {
-    use crate::schema::registered_users::dsl::*;
+    use crate::schema::user_identities::dsl::*;
     let code = crate::utils::generate_friend_code();
-    diesel::update(crate::schema::registered_users::table)
+    diesel::update(crate::schema::user_identities::table)
         .filter(id.eq(userid))
         .set(friend_code.eq(&code))
         .execute(conn)?;
@@ -341,7 +365,7 @@ pub fn regenerate_friend_code(
 }
 
 pub fn delete_activity(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     userid: i32,
     activity: i32,
 ) -> Result<bool, TimeError> {
@@ -354,7 +378,7 @@ pub fn delete_activity(
 }
 
 pub fn new_leaderboard(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     creator_id: i32,
     name: &str,
 ) -> Result<String, TimeError> {
@@ -384,7 +408,7 @@ pub fn new_leaderboard(
 }
 
 pub fn regenerate_leaderboard_invite(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
 ) -> Result<String, TimeError> {
     let newinvite = crate::utils::generate_token();
@@ -397,7 +421,7 @@ pub fn regenerate_leaderboard_invite(
 }
 
 pub fn delete_leaderboard(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lname: &str,
 ) -> Result<bool, TimeError> {
     use crate::schema::leaderboards::dsl::*;
@@ -408,7 +432,7 @@ pub fn delete_leaderboard(
 }
 
 pub fn get_leaderboard_id_by_name(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lname: &str,
 ) -> Result<i32, TimeError> {
     use crate::schema::leaderboards::dsl::*;
@@ -419,7 +443,7 @@ pub fn get_leaderboard_id_by_name(
 }
 
 pub fn get_leaderboard(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lname: &str,
 ) -> Result<PrivateLeaderboard, TimeError> {
     let board = {
@@ -457,7 +481,7 @@ pub fn get_leaderboard(
 }
 
 pub fn add_user_to_leaderboard(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     invite: &str,
 ) -> Result<crate::api::users::ListLeaderboard, TimeError> {
@@ -487,7 +511,7 @@ pub fn add_user_to_leaderboard(
 }
 
 pub fn remove_user_from_leaderboard(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
     uid: i32,
 ) -> Result<bool, TimeError> {
@@ -499,7 +523,7 @@ pub fn remove_user_from_leaderboard(
 }
 
 pub fn promote_user_to_leaderboard_admin(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
     uid: i32,
 ) -> Result<bool, TimeError> {
@@ -512,7 +536,7 @@ pub fn promote_user_to_leaderboard_admin(
 }
 
 pub fn demote_user_to_leaderboard_member(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
     uid: i32,
 ) -> Result<bool, TimeError> {
@@ -525,7 +549,7 @@ pub fn demote_user_to_leaderboard_member(
 }
 
 pub fn is_leaderboard_member(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     lid: i32,
 ) -> Result<bool, TimeError> {
@@ -539,7 +563,7 @@ pub fn is_leaderboard_member(
 }
 
 pub fn get_user_coding_time_since(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     since: chrono::NaiveDateTime,
 ) -> Result<i32, TimeError> {
@@ -552,7 +576,7 @@ pub fn get_user_coding_time_since(
 }
 
 pub fn is_leaderboard_admin(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
     lid: i32,
 ) -> Result<bool, TimeError> {
@@ -566,7 +590,7 @@ pub fn is_leaderboard_admin(
 }
 
 pub fn get_leaderboard_admin_count(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lid: i32,
 ) -> Result<i64, TimeError> {
     use crate::schema::leaderboard_members::dsl::*;
@@ -577,7 +601,7 @@ pub fn get_leaderboard_admin_count(
 }
 
 pub fn get_user_leaderboards(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
 ) -> Result<Vec<crate::api::users::ListLeaderboard>, TimeError> {
     let ids = {
@@ -621,7 +645,7 @@ pub fn get_user_leaderboards(
 }
 
 pub fn get_coding_time_steps(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     uid: i32,
 ) -> CodingTimeSteps {
     CodingTimeSteps {
@@ -644,4 +668,94 @@ pub fn get_coding_time_steps(
         )
         .unwrap_or(0),
     }
+}
+
+pub fn get_testaustime_user_by_id(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    uid: i32,
+) -> Result<TestaustimeUser, TimeError> {
+    use crate::schema::testaustime_users::dsl::*;
+    Ok(testaustime_users
+        .filter(identity.eq(uid))
+        .first::<TestaustimeUser>(conn)?)
+}
+
+#[cfg(feature = "testausid")]
+pub fn testausid_login(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    user_id_arg: String,
+    username: String,
+    platform_id: String,
+) -> Result<String, TimeError> {
+    use crate::schema::{
+        testausid_users::dsl::{identity, testausid_users, user_id},
+        user_identities::dsl::{auth_token, id, user_identities},
+    };
+
+    let user_identity_opt = testausid_users
+        .filter(user_id.eq(&user_id_arg))
+        .select(identity)
+        .first::<i32>(conn)
+        .optional()?;
+
+    if let Some(user_identity) = user_identity_opt {
+        let token = user_identities
+            .filter(id.eq(user_identity))
+            .select(auth_token)
+            .first::<String>(conn)?;
+
+        Ok(token)
+    } else {
+        let token = generate_token();
+        let new_user = NewUserIdentity {
+            //FIXME: You can get around using a clone here
+            auth_token: token.clone(),
+            registration_time: chrono::Local::now().naive_local(),
+            username,
+            friend_code: generate_friend_code(),
+        };
+        let new_user_id = diesel::insert_into(crate::schema::user_identities::table)
+            .values(&new_user)
+            .returning(id)
+            .get_results::<i32>(conn)
+            .map_err(|_| TimeError::UserExists)?;
+
+        let testausid_user = NewTestausIdUser {
+            user_id: user_id_arg,
+            identity: new_user_id[0],
+            service_id: platform_id,
+        };
+
+        diesel::insert_into(testausid_users)
+            .values(&testausid_user)
+            .execute(conn)?;
+
+        Ok(token)
+    }
+}
+
+pub fn change_visibility(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    userid: i32,
+    visibility: bool,
+) -> Result<(), TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    diesel::update(user_identities.filter(id.eq(userid)))
+        .set(is_public.eq(visibility))
+        .execute(conn)?;
+    Ok(())
+}
+
+pub fn search_public_users(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    search: &str,
+) -> Result<Vec<PublicUser>, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    Ok(user_identities
+        .filter(is_public.eq(true))
+        .filter(username.like(format!("%{}%", search)))
+        .load::<UserIdentity>(conn)?
+        .into_iter()
+        .map(|u| u.into())
+        .collect())
 }
