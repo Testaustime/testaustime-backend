@@ -10,7 +10,13 @@ mod utils;
 
 use actix::prelude::*;
 use actix_cors::Cors;
-use actix_web::{middleware::Logger, web, web::Data, App, HttpServer};
+use actix_web::{
+    error::{ErrorBadRequest, QueryPayloadError},
+    middleware::Logger,
+    web,
+    web::{Data, QueryConfig},
+    App, HttpServer,
+};
 #[cfg(feature = "testausid")]
 use awc::Client;
 use diesel::{r2d2::ConnectionManager, PgConnection};
@@ -81,7 +87,14 @@ async fn main() -> std::io::Result<()> {
                 http::header::CONTENT_TYPE,
             ])
             .max_age(3600);
+        let query_config = QueryConfig::default().error_handler(|err, _| match err {
+            QueryPayloadError::Deserialize(e) => {
+                ErrorBadRequest(json!({ "error": format!("{}", e) }))
+            }
+            _ => unreachable!(),
+        });
         let app = App::new()
+            .app_data(query_config)
             .wrap(cors)
             .wrap(Logger::new(
                 r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
@@ -138,7 +151,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::promote_member)
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
-                    .service(api::leaderboards::regenerate_invite);
+                    .service(api::leaderboards::regenerate_invite)
+                    .service(api::search::search_public_users);
                 #[cfg(feature = "testausid")]
                 {
                     scope.service(api::oauth::callback)

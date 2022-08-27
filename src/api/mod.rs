@@ -9,6 +9,7 @@ pub mod friends;
 pub mod leaderboards;
 #[cfg(feature = "testausid")]
 pub mod oauth;
+pub mod search;
 pub mod users;
 
 static VALID_NAME_REGEX: LazyLock<Regex> =

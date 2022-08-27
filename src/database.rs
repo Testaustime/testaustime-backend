@@ -745,3 +745,17 @@ pub fn change_visibility(
         .execute(conn)?;
     Ok(())
 }
+
+pub fn search_public_users(
+    conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+    search: &str,
+) -> Result<Vec<PublicUser>, TimeError> {
+    use crate::schema::user_identities::dsl::*;
+    Ok(user_identities
+        .filter(is_public.eq(true))
+        .filter(username.like(format!("%{}%", search)))
+        .load::<UserIdentity>(conn)?
+        .into_iter()
+        .map(|u| u.into())
+        .collect())
+}

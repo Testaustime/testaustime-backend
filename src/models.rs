@@ -17,6 +17,23 @@ pub struct UserIdentity {
     pub is_public: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct PublicUser {
+    pub id: i32,
+    pub username: String,
+    pub registration_time: chrono::NaiveDateTime,
+}
+
+impl From<UserIdentity> for PublicUser {
+    fn from(user_identity: UserIdentity) -> PublicUser {
+        PublicUser {
+            id: user_identity.id,
+            username: user_identity.username,
+            registration_time: user_identity.registration_time,
+        }
+    }
+}
+
 #[derive(Queryable, Clone, Debug, Serialize)]
 pub struct TestaustimeUser {
     pub id: i32,
