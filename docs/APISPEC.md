@@ -4,7 +4,7 @@
 
 - Ratelimit: 10 req/m
 
-The desired interval at which to send heartbeats is immidiately when editing a file, and after that at max every 30 seconds, and only when the user does something actively in the editor.
+The desired interval at which to send heartbeats is immediately when editing a file, and after that at max every 30 seconds, and only when the user does something actively in the editor.
 
 ## Endpoints
 
