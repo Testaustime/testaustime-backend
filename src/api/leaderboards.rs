@@ -45,6 +45,15 @@ pub async fn create_leaderboard(
     if !super::VALID_NAME_REGEX.is_match(&body.name) {
         return Err(TimeError::BadLeaderboardName);
     }
+    let mut conn = db.get()?;
+    let lname = body.name.clone();
+    if block(move || database::get_leaderboard_id_by_name(&mut conn, &lname))
+        .await?
+        .is_ok()
+    {
+        return Err(TimeError::LeaderboardExists);
+    }
+
     match block(move || database::new_leaderboard(&mut db.get()?, creator.id, &body.name)).await? {
         Ok(code) => Ok(web::Json(json!({ "invite_code": code }))),
         Err(e) => {
