@@ -3,10 +3,16 @@ use actix_web::{
     web::{self, block, Data, Json, Path},
     HttpResponse, Responder,
 };
+use dashmap::DashMap;
 use diesel::result::DatabaseErrorKind;
 use serde::Deserialize;
 
-use crate::{database, error::TimeError, models::UserId, DbPool};
+use crate::{
+    database,
+    error::TimeError,
+    models::{PrivateLeaderboard, UserId},
+    DbPool,
+};
 
 #[derive(Deserialize)]
 pub struct LeaderboardName {
@@ -22,6 +28,13 @@ pub struct LeaderboardInvite {
 pub struct LeaderboardUser {
     pub user: String,
 }
+
+pub struct CachedLeaderboard {
+    pub board: PrivateLeaderboard,
+    pub valid_until: chrono::DateTime<chrono::Utc>,
+}
+
+pub type LeaderboardCache = DashMap<i32, CachedLeaderboard>;
 
 #[post("/leaderboards/create")]
 pub async fn create_leaderboard(
@@ -52,16 +65,32 @@ pub async fn get_leaderboard(
     user: UserId,
     path: Path<(String,)>,
     db: Data<DbPool>,
+    cache: Data<LeaderboardCache>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     let name = path.0.clone();
     if let Ok(lid) = block(move || database::get_leaderboard_id_by_name(&mut conn, &name)).await? {
         let mut conn = db.get()?;
         if block(move || database::is_leaderboard_member(&mut conn, user.id, lid)).await?? {
-            Ok(web::Json({
-                let mut conn = db.get()?;
-                block(move || database::get_leaderboard(&mut conn, &path.0)).await??
-            }))
+            if let Some(cached_leaderboard) = cache.get(&lid) {
+                if cached_leaderboard.value().valid_until > chrono::Utc::now() {
+                    return Ok(web::Json(cached_leaderboard.board.to_owned()));
+                } else {
+                    drop(cached_leaderboard);
+                    cache.remove(&lid);
+                }
+            }
+            let mut conn = db.get()?;
+            let board = block(move || database::get_leaderboard(&mut conn, &path.0)).await??;
+            cache.insert(
+                lid,
+                CachedLeaderboard {
+                    board: board.clone(),
+                    valid_until: chrono::Utc::now() + chrono::Duration::minutes(5),
+                },
+            );
+
+            Ok(web::Json(board))
         } else {
             error!("{}", TimeError::Unauthorized);
             Err(TimeError::Unauthorized)

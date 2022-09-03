@@ -70,6 +70,7 @@ async fn main() -> std::io::Result<()> {
     let max_registers = config.max_registers_per_day.unwrap_or(3);
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
+    let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
     let ratelimiter = RateLimiterStorage::new(max_requests, 60).start();
     let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
     let registers_ratelimiter = RateLimiterStorage::new(max_registers, 86400).start();
@@ -162,6 +163,7 @@ async fn main() -> std::io::Result<()> {
                     scope
                 }
             })
+            .app_data(Data::clone(&leaderboard_cache))
             .app_data(Data::clone(&pool))
             .app_data(Data::clone(&heartbeat_store));
         #[cfg(feature = "testausid")]
