@@ -110,19 +110,18 @@ pub async fn get_activity_summary(
     };
 
     //FIXME: This does a lot of unnecessary calculations
+    let now = Local::now().naive_local();
+
     let all_time = group_by_language(data.clone().into_iter());
-    let last_month = group_by_language(data.clone().into_iter().take_while(|d| {
-        Local::now()
-            .naive_local()
-            .signed_duration_since(d.start_time)
-            < Duration::days(30)
-    }));
-    let last_week = group_by_language(data.into_iter().take_while(|d| {
-        Local::now()
-            .naive_local()
-            .signed_duration_since(d.start_time)
-            < Duration::days(7)
-    }));
+    let last_month = group_by_language(
+        data.clone()
+            .into_iter()
+            .take_while(|d| now.signed_duration_since(d.start_time) < Duration::days(30)),
+    );
+    let last_week = group_by_language(
+        data.into_iter()
+            .take_while(|d| now.signed_duration_since(d.start_time) < Duration::days(7)),
+    );
 
     let langs = serde_json::json!({
         "last_week": {
