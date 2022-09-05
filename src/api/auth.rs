@@ -6,6 +6,7 @@ use actix_web::{
     web::{block, Data, Json},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
+use database::Database;
 
 use crate::{
     database::{
@@ -23,14 +24,14 @@ impl FromRequest for UserId {
     type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Self::Error>>>>;
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let db = Data::extract(req);
+        let db = Data::<DbPool>::extract(req);
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&mut db.get()?, token)
+                    db.get()?.get_user_by_token(token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(UserId { id: user.id })

@@ -19,8 +19,10 @@ use actix_web::{
 };
 #[cfg(feature = "testausid")]
 use awc::Client;
-use diesel::{r2d2::ConnectionManager, PgConnection};
-use r2d2::Pool;
+use diesel::{
+    r2d2::{ConnectionManager, Pool},
+    PgConnection,
+};
 use serde_derive::Deserialize;
 use testausratelimiter::*;
 
@@ -47,7 +49,8 @@ pub struct TimeConfig {
     pub allowed_origin: String,
 }
 
-type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+type DbPool = diesel::r2d2::Pool<ConnectionManager<PgConnection>>;
+type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
