@@ -27,7 +27,7 @@ pub async fn update(
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 64 {
             return Err(TimeError::InvalidLength(
-                "Project name is over 32 chars".to_string(),
+                "Project name is over 64 chars".to_string(),
             ));
         }
     }
