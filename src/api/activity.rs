@@ -25,7 +25,7 @@ pub async fn update(
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(project) = &heartbeat.project_name {
-        if project.len() > 32 {
+        if project.len() > 64 {
             return Err(TimeError::InvalidLength(
                 "Project name is over 32 chars".to_string(),
             ));
