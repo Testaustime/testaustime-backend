@@ -6,13 +6,7 @@ use actix_web::{
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 
-use crate::{
-    database::{add_activity, delete_activity},
-    error::TimeError,
-    models::UserId,
-    requests::*,
-    DbPool,
-};
+use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -62,16 +56,14 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    let res = match add_activity(
-                        &mut db.get()?,
-                        user.id,
-                        inner_heartbeat,
-                        start,
-                        duration,
-                    ) {
-                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                        Err(e) => Err(ErrorInternalServerError(e)),
-                    }?;
+                    let res =
+                        match db
+                            .get()?
+                            .add_activity(user.id, inner_heartbeat, start, duration)
+                        {
+                            Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
+                            Err(e) => Err(ErrorInternalServerError(e)),
+                        }?;
                     heartbeats.insert(
                         user,
                         (
@@ -95,11 +87,13 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
-                let res =
-                    match add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration) {
-                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                        Err(e) => Err(ErrorInternalServerError(e)),
-                    }?;
+                let res = match db
+                    .get()?
+                    .add_activity(user.id, inner_heartbeat, start, duration)
+                {
+                    Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
+                    Err(e) => Err(ErrorInternalServerError(e)),
+                }?;
                 heartbeats.insert(
                     user,
                     (
@@ -138,7 +132,8 @@ pub async fn flush(
             drop(flushme);
             heartbeats.remove(&user);
             match block(move || {
-                add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration)
+                db.get()?
+                    .add_activity(user.id, inner_heartbeat, start, duration)
             })
             .await?
             {
@@ -157,11 +152,8 @@ pub async fn delete(
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let deleted = block(move || {
-        delete_activity(
-            &mut db.get()?,
-            user.id,
-            body.parse::<i32>().map_err(ErrorBadRequest)?,
-        )
+        db.get()?
+            .delete_activity(user.id, body.parse::<i32>().map_err(ErrorBadRequest)?)
     })
     .await??;
     if deleted {

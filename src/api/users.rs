@@ -7,7 +7,7 @@ use chrono::{Duration, Local};
 use serde_derive::Deserialize;
 
 use crate::{
-    database,
+    database::DatabaseConnection,
     error::TimeError,
     models::{UserId, UserIdentity},
     requests::DataRequest,
@@ -35,7 +35,7 @@ pub struct ListLeaderboard {
 #[get("/users/@me/leaderboards")]
 pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
     Ok(web::Json(
-        block(move || database::get_user_leaderboards(&mut db.get()?, user.id)).await??,
+        block(move || db.get()?.get_user_leaderboards(user.id)).await??,
     ))
 }
 
@@ -44,13 +44,14 @@ pub async fn delete_user(
     pool: Data<DbPool>,
     user: web::Json<UserAuthentication>,
 ) -> Result<impl Responder, TimeError> {
-    let clone = pool.clone();
+    let mut conn = pool.get()?;
     if let Some(user) = block(move || {
-        database::verify_user_password(&mut pool.get()?, &user.username, &user.password)
+        pool.get()?
+            .verify_user_password(&user.username, &user.password)
     })
     .await??
     {
-        block(move || database::delete_user(&mut clone.get()?, user.id)).await??;
+        block(move || conn.delete_user(user.id)).await??;
     }
     Ok(HttpResponse::Ok().finish())
 }
@@ -65,19 +66,17 @@ pub async fn get_activities(
     let mut conn = db.get()?;
 
     let data = if path.0 == "@me" {
-        block(move || database::get_activity(&mut conn, data.into_inner(), user.id)).await??
+        block(move || conn.get_activity(data.into_inner(), user.id)).await??
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
-        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
+        let target_user = conn.get_user_by_name(&path.0)?;
 
         if target_user.id == user.id
             || target_user.is_public
-            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-                .await??
+            || block(move || conn.are_friends(user.id, target_user.id)).await??
         {
-            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
-                .await??
+            block(move || db.get()?.get_activity(data.into_inner(), target_user.id)).await??
         } else {
             return Err(TimeError::Unauthorized);
         }
@@ -94,16 +93,15 @@ pub async fn get_activity_summary(
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     let data = if path.0 == "@me" {
-        block(move || database::get_all_activity(&mut conn, user.id)).await??
+        block(move || conn.get_all_activity(user.id)).await??
     } else {
-        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
+        let target_user = conn.get_user_by_name(&path.0)?;
 
         if target_user.id == user.id
             || target_user.is_public
-            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-                .await??
+            || block(move || db.get()?.are_friends(user.id, target_user.id)).await??
         {
-            block(move || database::get_all_activity(&mut conn, target_user.id)).await??
+            block(move || conn.get_all_activity(target_user.id)).await??
         } else {
             return Err(TimeError::Unauthorized);
         }

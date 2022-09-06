@@ -9,7 +9,7 @@ use actix_web::{
 use awc::Client;
 use serde_derive::Deserialize;
 
-use crate::{database::testausid_login, error::TimeError, DbPool};
+use crate::{database::DatabaseConnection, error::TimeError, DbPool};
 
 #[derive(Deserialize)]
 struct TokenExchangeRequest {
@@ -83,7 +83,7 @@ async fn callback(
         .unwrap();
 
     let token =
-        block(move || testausid_login(&mut db.get()?, res.id, res.name, res.platform.id)).await??;
+        block(move || db.get()?.testausid_login(res.id, res.name, res.platform.id)).await??;
 
     Ok(HttpResponse::PermanentRedirect()
         .insert_header(("location", "https://testaustime.fi/oauth_redirect"))
