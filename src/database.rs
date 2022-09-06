@@ -3,12 +3,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{prelude::*, Duration};
-use diesel::{
-    insert_into,
-    pg::PgConnection,
-    prelude::*,
-    r2d2::{ConnectionManager, PooledConnection},
-};
+use diesel::{insert_into, prelude::*};
 
 use crate::{
     error::TimeError,
@@ -18,7 +13,7 @@ use crate::{
     DbConnection,
 };
 
-pub trait Database {
+pub trait DatabaseConnection {
     fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError>;
 
     fn get_user_by_name(&mut self, target_username: &str) -> Result<UserIdentity, TimeError>;
@@ -75,7 +70,7 @@ pub trait Database {
 
     fn delete_activity(&mut self, userid: i32, activity: i32) -> Result<bool, TimeError>;
 
-    fn new_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError>;
+    fn create_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError>;
 
     fn regenerate_leaderboard_invite(&mut self, lid: i32) -> Result<String, TimeError>;
 
@@ -131,7 +126,7 @@ pub trait Database {
     fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError>;
 }
 
-impl Database for DbConnection {
+impl DatabaseConnection for DbConnection {
     fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError> {
         use crate::schema::user_identities::dsl::*;
         Ok(user_identities
@@ -167,8 +162,8 @@ impl Database for DbConnection {
         username: &str,
         password: &str,
     ) -> Result<Option<UserIdentity>, TimeError> {
-        let user = get_user_by_name(self, username)?;
-        let tuser = get_testaustime_user_by_id(self, user.id)?;
+        let user = self.get_user_by_name(username)?;
+        let tuser = self.get_testaustime_user_by_id(user.id)?;
 
         let argon2 = Argon2::default();
         let Ok(salt) = SaltString::new(std::str::from_utf8(&tuser.salt).unwrap()) else {
@@ -198,7 +193,7 @@ impl Database for DbConnection {
         password: &str,
     ) -> Result<NewUserIdentity, TimeError> {
         use crate::schema::{testaustime_users, user_identities};
-        if user_exists(self, username)? {
+        if self.user_exists(username)? {
             return Err(TimeError::UserExists);
         }
         let salt = SaltString::generate(&mut OsRng);
@@ -232,7 +227,7 @@ impl Database for DbConnection {
     }
 
     fn change_username(&mut self, user: i32, new_username: &str) -> Result<(), TimeError> {
-        if user_exists(self, new_username)? {
+        if self.user_exists(new_username)? {
             return Err(TimeError::UserExists);
         }
         use crate::schema::user_identities::dsl::*;
@@ -445,7 +440,7 @@ impl Database for DbConnection {
         Ok(res != 0)
     }
 
-    fn new_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError> {
+    fn create_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError> {
         let code = crate::utils::generate_token();
         let board = NewLeaderboard {
             name: name.to_string(),
@@ -518,11 +513,13 @@ impl Database for DbConnection {
             chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
         );
         for m in members {
-            if let Ok(user) = get_user_by_id(self, m.user_id) {
+            if let Ok(user) = self.get_user_by_id(m.user_id) {
                 fullmembers.push(PrivateLeaderboardMember {
                     username: user.username,
                     admin: m.admin,
-                    time_coded: get_user_coding_time_since(self, m.user_id, aweekago).unwrap_or(0),
+                    time_coded: self
+                        .get_user_coding_time_since(m.user_id, aweekago)
+                        .unwrap_or(0),
                 });
             }
         }
@@ -677,24 +674,21 @@ impl Database for DbConnection {
 
     fn get_coding_time_steps(&mut self, uid: i32) -> CodingTimeSteps {
         CodingTimeSteps {
-            all_time: get_user_coding_time_since(
-                self,
-                uid,
-                chrono::NaiveDateTime::from_timestamp(0, 0),
-            )
-            .unwrap_or(0),
-            past_month: get_user_coding_time_since(
-                self,
-                uid,
-                chrono::Local::now().naive_local() - chrono::Duration::days(30),
-            )
-            .unwrap_or(0),
-            past_week: get_user_coding_time_since(
-                self,
-                uid,
-                chrono::Local::now().naive_local() - chrono::Duration::days(7),
-            )
-            .unwrap_or(0),
+            all_time: self
+                .get_user_coding_time_since(uid, chrono::NaiveDateTime::from_timestamp(0, 0))
+                .unwrap_or(0),
+            past_month: self
+                .get_user_coding_time_since(
+                    uid,
+                    chrono::Local::now().naive_local() - chrono::Duration::days(30),
+                )
+                .unwrap_or(0),
+            past_week: self
+                .get_user_coding_time_since(
+                    uid,
+                    chrono::Local::now().naive_local() - chrono::Duration::days(7),
+                )
+                .unwrap_or(0),
         }
     }
 

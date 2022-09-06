@@ -6,13 +6,9 @@ use actix_web::{
     web::{block, Data, Json},
     FromRequest, HttpRequest, HttpResponse, Responder,
 };
-use database::Database;
 
 use crate::{
-    database::{
-        self, change_password, change_username, get_testaustime_user_by_id, get_user_by_id,
-        get_user_by_token, new_testaustime_user, regenerate_token, verify_user_password,
-    },
+    database::DatabaseConnection,
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
     requests::*,
@@ -57,7 +53,7 @@ impl FromRequest for UserIdentity {
                 let db: Data<DbPool> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    get_user_by_token(&mut db.get()?, token)
+                    db.get()?.get_user_by_token(token)
                 }).await?;
                 if let Ok(user) = user {
                     Ok(user)
@@ -81,8 +77,11 @@ pub async fn login(
             "Password cannot be longer than 128 characters".to_string(),
         ));
     }
-    match block(move || verify_user_password(&mut db.get()?, &data.username, &data.password))
-        .await?
+    match block(move || {
+        db.get()?
+            .verify_user_password(&data.username, &data.password)
+    })
+    .await?
     {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
         Ok(None) => Err(TimeError::Unauthorized),
@@ -92,7 +91,7 @@ pub async fn login(
 
 #[post("/auth/regenerate")]
 pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
-    match block(move || regenerate_token(&mut db.get()?, user.id)).await? {
+    match block(move || db.get()?.regenerate_token(user.id)).await? {
         Ok(token) => {
             let token = json!({ "token": token });
             Ok(Json(token))
@@ -119,7 +118,7 @@ pub async fn register(
 
     let mut conn = db.get()?;
     let username = data.username.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username))
+    if block(move || conn.get_user_by_name(&username))
         .await?
         .is_ok()
     {
@@ -127,8 +126,11 @@ pub async fn register(
     }
 
     Ok(Json(
-        block(move || new_testaustime_user(&mut db.get()?, &data.username, &data.password))
-            .await??,
+        block(move || {
+            db.get()?
+                .new_testaustime_user(&data.username, &data.password)
+        })
+        .await??,
     ))
 }
 
@@ -148,7 +150,7 @@ pub async fn changeusername(
     }
     let mut conn = db.get()?;
     let username = data.new.clone();
-    if block(move || database::get_user_by_name(&mut conn, &username))
+    if block(move || conn.get_user_by_name(&username))
         .await?
         .is_ok()
     {
@@ -156,9 +158,8 @@ pub async fn changeusername(
     }
 
     let mut conn = db.get()?;
-    match block(move || get_user_by_id(&mut conn, userid.id)).await? {
-        Ok(user) => match block(move || change_username(&mut db.get()?, user.id, &data.new)).await?
-        {
+    match block(move || conn.get_user_by_id(userid.id)).await? {
+        Ok(user) => match block(move || db.get()?.change_username(user.id, &data.new)).await? {
             Ok(_) => Ok(HttpResponse::Ok().finish()),
             Err(e) => Err(e),
         },
@@ -183,10 +184,10 @@ pub async fn changepassword(
     let old = data.old.to_owned();
     let mut conn = db.get()?;
     let mut conn2 = db.get()?;
-    let tuser = block(move || get_testaustime_user_by_id(&mut db.get()?, user.id)).await??;
-    let k = block(move || verify_user_password(&mut conn, &user.username, &old)).await??;
+    let tuser = block(move || db.get()?.get_testaustime_user_by_id(user.id)).await??;
+    let k = block(move || conn.verify_user_password(&user.username, &old)).await??;
     if k.is_some() || tuser.password.iter().all(|n| *n == 0) {
-        match change_password(&mut conn2, user.id, &data.new) {
+        match conn2.change_password(user.id, &data.new) {
             Ok(_) => Ok(HttpResponse::Ok().finish()),
             Err(e) => Err(e),
         }
