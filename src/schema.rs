@@ -1,4 +1,6 @@
-table! {
+// @generated automatically by Diesel CLI.
+
+diesel::table! {
     coding_activities (id) {
         id -> Int4,
         user_id -> Int4,
@@ -11,7 +13,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     friend_relations (id) {
         id -> Int4,
         lesser_id -> Int4,
@@ -19,7 +21,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     leaderboard_members (id) {
         id -> Int4,
         leaderboard_id -> Int4,
@@ -28,7 +30,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     leaderboards (id) {
         id -> Int4,
         name -> Varchar,
@@ -37,7 +39,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     testausid_users (id) {
         id -> Int4,
         user_id -> Text,
@@ -46,7 +48,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     testaustime_users (id) {
         id -> Int4,
         password -> Bytea,
@@ -55,7 +57,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     user_identities (id) {
         id -> Int4,
         auth_token -> Bpchar,
@@ -66,13 +68,13 @@ table! {
     }
 }
 
-joinable!(coding_activities -> user_identities (user_id));
-joinable!(leaderboard_members -> leaderboards (leaderboard_id));
-joinable!(leaderboard_members -> user_identities (user_id));
-joinable!(testausid_users -> user_identities (identity));
-joinable!(testaustime_users -> user_identities (identity));
+diesel::joinable!(coding_activities -> user_identities (user_id));
+diesel::joinable!(leaderboard_members -> leaderboards (leaderboard_id));
+diesel::joinable!(leaderboard_members -> user_identities (user_id));
+diesel::joinable!(testausid_users -> user_identities (identity));
+diesel::joinable!(testaustime_users -> user_identities (identity));
 
-allow_tables_to_appear_in_same_query!(
+diesel::allow_tables_to_appear_in_same_query!(
     coding_activities,
     friend_relations,
     leaderboard_members,

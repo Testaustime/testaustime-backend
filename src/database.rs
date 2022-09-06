@@ -435,9 +435,10 @@ pub fn get_leaderboard_id_by_name(
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lname: &str,
 ) -> Result<i32, TimeError> {
+    sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
     use crate::schema::leaderboards::dsl::*;
     Ok(leaderboards
-        .filter(name.eq(lname))
+        .filter(lower(name).eq(lname.to_lowercase()))
         .select(id)
         .first::<i32>(conn)?)
 }
@@ -446,10 +447,11 @@ pub fn get_leaderboard(
     conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     lname: &str,
 ) -> Result<PrivateLeaderboard, TimeError> {
+    sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
     let board = {
         use crate::schema::leaderboards::dsl::*;
         leaderboards
-            .filter(name.eq(lname))
+            .filter(lower(name).eq(lname.to_lowercase()))
             .first::<Leaderboard>(conn)?
     };
     let members = {
