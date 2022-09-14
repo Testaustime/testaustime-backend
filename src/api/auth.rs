@@ -142,6 +142,9 @@ pub async fn changeusername(
             "Username is not between 2 and 32 chars".to_string(),
         ));
     }
+    if !super::VALID_NAME_REGEX.is_match(&data.new) {
+        return Err(TimeError::BadUsername);
+    }
     let mut conn = db.get()?;
     let username = data.new.clone();
     if block(move || database::get_user_by_name(&mut conn, &username))
