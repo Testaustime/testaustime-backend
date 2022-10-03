@@ -774,12 +774,17 @@ impl DatabaseConnection for DbConnection {
             .collect())
     }
 
-    fn rename_project(&mut self, target_user_id: i32, from: &str, to: &str) -> Result<usize, TimeError> {
+    fn rename_project(
+        &mut self,
+        target_user_id: i32,
+        from: &str,
+        to: &str,
+    ) -> Result<usize, TimeError> {
         use crate::schema::coding_activities::dsl::*;
         Ok(diesel::update(coding_activities)
-           .filter(user_id.eq(target_user_id))
-           .filter(project_name.eq(from))
-           .set(project_name.eq(to))
-           .execute(self)?)
+            .filter(user_id.eq(target_user_id))
+            .filter(project_name.eq(from))
+            .set(project_name.eq(to))
+            .execute(self)?)
     }
 }
