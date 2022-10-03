@@ -158,16 +158,9 @@ pub async fn changeusername(
     }
 
     let mut conn = db.get()?;
-    match block(move || conn.get_user_by_id(userid.id)).await? {
-        Ok(user) => match block(move || db.get()?.change_username(user.id, &data.new)).await? {
-            Ok(_) => Ok(HttpResponse::Ok().finish()),
-            Err(e) => Err(e),
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err(e)
-        }
-    }
+    let user = block(move || conn.get_user_by_id(userid.id)).await??;
+    block(move || db.get()?.change_username(user.id, &data.new)).await??;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/auth/changepassword")]
