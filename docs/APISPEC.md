@@ -512,11 +512,12 @@ Contains main operations with activity heartbeats on which this service is based
 
 ### Endpoints
 
-| Endpoint|  Method | Description |
-| --- | --- | --- |
-| [/activity/update](#activity_up) | POST | Creating code session and logs current activity in that|
-| [/activity/flush](#activity_fl) | POST | Flushing any currently active coding session |
-| [/activity/delete](#activity_del) | DELETE | Deleting selected code session |
+| Endpoint                             | Method | Description                                             |
+| ---                                  | ---    | ---                                                     |
+| [/activity/update](#activity_up)     | POST   | Creating code session and logs current activity in that |
+| [/activity/flush](#activity_fl)      | POST   | Flushing any currently active coding session            |
+| [/activity/rename](#activity_rename) | POST   | Rename all activities with matching `project_name`      |
+| [/activity/delete](#activity_del)    | DELETE | Deleting selected code session                          |
 
 #### <a name="activity_up"></a>  [1. POST /activity/update](#activity)
 
@@ -610,7 +611,54 @@ curl --request POST 'https://api.testaustime.fi/activity/flush' \
 200 OK
 ```
 
-#### <a name="activity_del"></a>  [3. POST /activity/delete](#activity)
+#### <a name="activity_rename"></a>  [3. POST /activity/rename](#activity)
+
+Rename all activities that have a matching `project_name`
+
+<details>
+  <summary>Header params:</summary>
+
+| Name          | Value            |
+| ---           | ---              |
+| Content-Type  | application/json |
+| Authorization | Bearer `<token>` |
+</details>
+
+<details>
+  <summary>Body params:</summary>
+| Param | Type   | Required | Description |
+| ---   | ---    | ---      | ---         |
+| from  | string | Yes      | old name    |
+| to    | string | Yes      | new name    |
+</details>
+
+
+**Sample request**
+```curl
+curl --request POST 'https://api.testaustime.fi/activity/rename' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer <token>' \
+--data-raw '{
+    "from": "old_name",
+    "to": "new_name"
+}'
+```
+
+**Sample response**
+```JSON
+{
+    "affected_activities": 20
+}
+```
+
+<details>
+  <summary>Response definitions:</summary>
+| Response Item       | Type | Description                  |
+| ---                 | ---  | ---                          |
+| affected_activities | int  | Number of activities renamed |
+</details>
+
+#### <a name="activity_del"></a>  [4. POST /activity/delete](#activity)
 
 Deletes selected code session
 
@@ -625,8 +673,8 @@ Deletes selected code session
 <details>
   <summary>Body params:</summary>
 
-| Param | Type | Description |
-| --- | --- | --- |
+| Param    | Type   | Description                                                                       |
+| ---      | ---    | ---                                                                               |
 | raw text | string | Activity id from response [`GET /users/{username}/activity/data`](#activity_data) |
 </details>
 
