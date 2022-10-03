@@ -1,15 +1,23 @@
 use actix_web::{
     error::*,
-    web::{block, Data, Json},
+    web::{block, Data, Json, self},
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
 use dashmap::DashMap;
+use serde_derive::Deserialize;
 
 use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
 
 pub type HeartBeatMemoryStore =
     DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
+
+
+#[derive(Deserialize)]
+pub struct RenameRequest {
+    from: String,
+    to: String,
+}
 
 #[post("/update")]
 pub async fn update(
@@ -148,4 +156,19 @@ pub async fn delete(
     } else {
         Err(TimeError::BadId)
     }
+}
+
+#[post("/activity/rename")]
+pub async fn rename_project(
+    user: UserId,
+    db: Data<DbPool>,
+    body: Json<RenameRequest>,
+) -> Result<impl Responder, TimeError> {
+    let renamed = block(move || {
+        db.get()?
+            .rename_project(user.id, &body.from, &body.to)
+    })
+    .await??;
+
+    Ok(web::Json(json!({"affected_activities": renamed})))
 }

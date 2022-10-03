@@ -124,6 +124,8 @@ pub trait DatabaseConnection {
     fn change_visibility(&mut self, userid: i32, visibility: bool) -> Result<(), TimeError>;
 
     fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError>;
+
+    fn rename_project(&mut self, user_id: i32, from: &str, to: &str) -> Result<usize, TimeError>;
 }
 
 impl DatabaseConnection for DbConnection {
@@ -770,5 +772,14 @@ impl DatabaseConnection for DbConnection {
             .into_iter()
             .map(|u| u.into())
             .collect())
+    }
+
+    fn rename_project(&mut self, target_user_id: i32, from: &str, to: &str) -> Result<usize, TimeError> {
+        use crate::schema::coding_activities::dsl::*;
+        Ok(diesel::update(coding_activities)
+           .filter(user_id.eq(target_user_id))
+           .filter(project_name.eq(from))
+           .set(project_name.eq(to))
+           .execute(self)?)
     }
 }

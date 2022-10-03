@@ -113,7 +113,8 @@ async fn main() -> std::io::Result<()> {
                     })
                     .service(api::activity::update)
                     .service(api::activity::delete)
-                    .service(api::activity::flush),
+                    .service(api::activity::flush)
+                    .service(api::activity::rename_project),
             )
             .service(
                 web::resource("/auth/register")
