@@ -1,4 +1,4 @@
-#![feature(let_else, once_cell)]
+#![feature(once_cell)]
 
 mod api;
 mod database;
