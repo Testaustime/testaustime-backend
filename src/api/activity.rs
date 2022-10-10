@@ -9,8 +9,7 @@ use serde_derive::Deserialize;
 
 use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
 
-pub type HeartBeatMemoryStore =
-    DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
+pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
 #[derive(Deserialize)]
 pub struct RenameRequest {
@@ -53,7 +52,7 @@ pub async fn update(
             ));
         }
     }
-    match heartbeats.get(&user) {
+    match heartbeats.get(&user.id) {
         Some(test) => {
             let (inner_heartbeat, start, duration) = test.to_owned();
             drop(test);
@@ -68,7 +67,7 @@ pub async fn update(
                         .map_err(ErrorInternalServerError)?;
 
                     heartbeats.insert(
-                        user,
+                        user.id,
                         (
                             heartbeat.into_inner(),
                             Local::now().naive_local(),
@@ -79,7 +78,7 @@ pub async fn update(
                 } else {
                     // Extend current coding session if heartbeat matches and it has been under the maximum duration of a break
                     heartbeats.insert(
-                        user,
+                        user.id,
                         (
                             heartbeat.into_inner(),
                             start,
@@ -95,7 +94,7 @@ pub async fn update(
                     .map_err(ErrorInternalServerError)?;
 
                 heartbeats.insert(
-                    user,
+                    user.id,
                     (
                         heartbeat.into_inner(),
                         Local::now().naive_local(),
@@ -108,7 +107,7 @@ pub async fn update(
         None => {
             // If the user has not sent a heartbeat during this session
             heartbeats.insert(
-                user,
+                user.id,
                 (
                     heartbeat.into_inner(),
                     Local::now().naive_local(),
@@ -126,10 +125,10 @@ pub async fn flush(
     db: Data<DbPool>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    if let Some(heartbeat) = heartbeats.get(&user) {
+    if let Some(heartbeat) = heartbeats.get(&user.id) {
         let (inner_heartbeat, start, duration) = heartbeat.to_owned();
         drop(heartbeat);
-        heartbeats.remove(&user);
+        heartbeats.remove(&user.id);
         block(move || {
             db.get()?
                 .add_activity(user.id, inner_heartbeat, start, duration)

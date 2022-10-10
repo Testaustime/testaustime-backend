@@ -268,6 +268,7 @@ Containts various mostfully read-operations with user data
 | [/users/@me/leaderboards](#my_leaderboards)             | GET    | Geting list of user leaderboards                |
 | [/users/{username}/activity/data](#activity_data)       | GET    | Geting user or user friend coding activity data |
 | [/users/{username}/activity/summary](#activity_summary) | GET    | Get a summary of a users activity               |
+| [/users/{username}/activity/current](#activity_cur)     | GET    | Get a users current coding session              |
 | [/users/@me/delete](#delete_myself)                     | DELETE | Deleting user account                           |
 
 #### <a name="me"></a>  [1. GET /users/@me](#users)
@@ -427,7 +428,7 @@ Get a summary of a users activity
 
 **Sample request**
 ```curl
-curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/data' \
+curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/summary' \
 --header 'Authorization: Bearer <token>'
 ```
 
@@ -470,7 +471,57 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/dat
 | last_week     | Object                   | Similar to `all_time` and `last_month`                                            |
 </details>
 
-#### <a name="delete_myself"></a>  [5. DELETE /users/@me/delete](#users)
+#### <a name="activity_cur"></a>  [5. GET /users/{username}/activity/current](#users)
+
+Gets details of the ongoing coding session if there is one.
+
+<details>
+  <summary>Header params:</summary>
+
+| Name          | Value            |
+| ---           | ---              |
+| Authorization | Bearer `<token>` |
+</details>
+
+<details>
+  <summary>Path params:</summary>
+
+| Path param |  Description |
+| --- | --- |
+| Username | Own or a friends username. Own username can also be replaced with `@me`|
+</details>
+
+**Sample request**
+```curl
+curl --request GET 'https://api.testaustime.fi/users/@me/activity/current' \
+--header 'Authorization: Bearer <token>'
+```
+
+**Sample response**
+```JSON
+{
+    "started": "YYYY-MM-DDTHH:MM:SS.ssssssZ",
+    "duration": "10",
+    "heartbeat": {
+        "language": "c",
+        "hostname": "hostname1",
+        "editor_name": "Neovim",
+        "project_name": "cool_project22"
+    }
+}
+```
+
+<details>
+  <summary>Response definitions:</summary>
+
+| Response Item | Type                     | Description                                                                       |
+| ---           | ---                      | ---                                                                               |
+| started       | string (ISO 8601 format) | Start time (time of sending first heartbeat) of user code session to microsecnods |
+| duration      | int                      | Duration of user code session in seconds                                          |
+| heartbeat     | Object                   | The HeartBeat object described [here](#activity_up)                               |
+</details>
+
+#### <a name="delete_myself"></a>  [6. DELETE /users/@me/delete](#users)
 
 Deletes user account
 

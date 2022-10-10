@@ -145,6 +145,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::friends::remove)
                     .service(api::users::my_profile)
                     .service(api::users::get_activities)
+                    .service(api::users::get_current_activity)
                     .service(api::users::delete_user)
                     .service(api::users::my_leaderboards)
                     .service(api::users::get_activity_summary)
