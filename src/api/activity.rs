@@ -7,7 +7,7 @@ use chrono::{Duration, Local};
 use dashmap::DashMap;
 use serde_derive::Deserialize;
 
-use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
+use crate::{database::Database, error::TimeError, models::UserId, requests::*};
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
@@ -21,7 +21,7 @@ pub struct RenameRequest {
 pub async fn update(
     user: UserId,
     heartbeat: Json<HeartBeat>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(project) = &heartbeat.project_name {
@@ -122,7 +122,7 @@ pub async fn update(
 #[post("/flush")]
 pub async fn flush(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(heartbeat) = heartbeats.get(&user.id) {
@@ -141,7 +141,7 @@ pub async fn flush(
 #[delete("/activity/delete")]
 pub async fn delete(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let deleted = block(move || {
@@ -159,7 +159,7 @@ pub async fn delete(
 #[post("/activity/rename")]
 pub async fn rename_project(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     body: Json<RenameRequest>,
 ) -> Result<impl Responder, TimeError> {
     let renamed = block(move || db.get()?.rename_project(user.id, &body.from, &body.to)).await??;

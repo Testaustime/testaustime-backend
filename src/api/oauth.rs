@@ -9,7 +9,7 @@ use actix_web::{
 use awc::Client;
 use serde_derive::Deserialize;
 
-use crate::{database::DatabaseConnection, error::TimeError, DbPool};
+use crate::{database::Database, error::TimeError};
 
 #[derive(Deserialize)]
 struct TokenExchangeRequest {
@@ -51,7 +51,7 @@ static CLIENT_INFO: LazyLock<ClientInfo> = LazyLock::new(|| {
 async fn callback(
     request: Query<TokenExchangeRequest>,
     client: Data<Client>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if request.code.chars().any(|c| !c.is_alphanumeric()) {
         return Err(TimeError::BadCode);

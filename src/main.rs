@@ -19,6 +19,7 @@ use actix_web::{
 };
 #[cfg(feature = "testausid")]
 use awc::Client;
+use database::{DatabaseConnectionPool, Database};
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
@@ -49,7 +50,6 @@ pub struct TimeConfig {
     pub allowed_origin: String,
 }
 
-type DbPool = diesel::r2d2::Pool<ConnectionManager<PgConnection>>;
 type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 #[actix_web::main]
@@ -62,10 +62,15 @@ async fn main() -> std::io::Result<()> {
             .expect("Invalid Toml in settings.toml");
 
     let manager = ConnectionManager::<PgConnection>::new(config.database_url);
-    let pool = Data::new(
-        Pool::builder()
-            .build(manager)
-            .expect("Failed to create connection pool"),
+
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create connection pool");
+
+    let database = Data::new(
+        Database {
+            backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
+        }
     );
 
     let max_requests = config.max_requests_per_min.unwrap_or(30);
@@ -169,7 +174,7 @@ async fn main() -> std::io::Result<()> {
                 }
             })
             .app_data(Data::clone(&leaderboard_cache))
-            .app_data(Data::clone(&pool))
+            .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store));
         #[cfg(feature = "testausid")]
         {

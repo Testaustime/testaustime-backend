@@ -8,11 +8,10 @@ use actix_web::{
 };
 
 use crate::{
-    database::DatabaseConnection,
+    database::Database,
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
     requests::*,
-    DbPool,
 };
 
 impl FromRequest for UserId {
@@ -20,11 +19,11 @@ impl FromRequest for UserId {
     type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Self::Error>>>>;
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let db = Data::<DbPool>::extract(req);
+        let db = Data::<Database>::extract(req);
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
             if let Some(auth) = auth {
-                let db: Data<DbPool> = db.await?;
+                let db = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
                     db.get()?.get_user_by_token(token)
@@ -50,7 +49,7 @@ impl FromRequest for UserIdentity {
         let auth = req.headers().get("Authorization").cloned();
         Box::pin(async move {
             if let Some(auth) = auth {
-                let db: Data<DbPool> = db.await?;
+                let db: Data<Database> = db.await?;
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                     db.get()?.get_user_by_token(token)
@@ -70,7 +69,7 @@ impl FromRequest for UserIdentity {
 #[post("/auth/login")]
 pub async fn login(
     data: Json<RegisterRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -90,7 +89,7 @@ pub async fn login(
 }
 
 #[post("/auth/regenerate")]
-pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
     match block(move || db.get()?.regenerate_token(user.id)).await? {
         Ok(token) => {
             let token = json!({ "token": token });
@@ -105,7 +104,7 @@ pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder
 
 pub async fn register(
     data: Json<RegisterRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -138,7 +137,7 @@ pub async fn register(
 pub async fn changeusername(
     userid: UserId,
     data: Json<UsernameChangeRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 2 || data.new.len() > 32 {
         return Err(TimeError::InvalidLength(
@@ -167,7 +166,7 @@ pub async fn changeusername(
 pub async fn changepassword(
     user: UserIdentity,
     data: Json<PasswordChangeRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 8 || data.new.len() > 128 {
         return Err(TimeError::InvalidLength(

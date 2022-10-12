@@ -8,10 +8,9 @@ use diesel::result::DatabaseErrorKind;
 use serde::Deserialize;
 
 use crate::{
-    database::DatabaseConnection,
+    database::Database,
     error::TimeError,
     models::{PrivateLeaderboard, UserId},
-    DbPool,
 };
 
 #[derive(Deserialize)]
@@ -40,7 +39,7 @@ pub type LeaderboardCache = DashMap<i32, CachedLeaderboard>;
 pub async fn create_leaderboard(
     creator: UserId,
     body: Json<LeaderboardName>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if !super::VALID_NAME_REGEX.is_match(&body.name) {
         return Err(TimeError::BadLeaderboardName);
@@ -73,7 +72,7 @@ pub async fn create_leaderboard(
 pub async fn get_leaderboard(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     cache: Data<LeaderboardCache>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
@@ -114,7 +113,7 @@ pub async fn get_leaderboard(
 pub async fn delete_leaderboard(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     let name = path.0.clone();
@@ -138,7 +137,7 @@ pub async fn delete_leaderboard(
 pub async fn join_leaderboard(
     user: UserId,
     body: Json<LeaderboardInvite>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     match block(move || {
         db.get()?
@@ -167,7 +166,7 @@ pub async fn join_leaderboard(
 pub async fn leave_leaderboard(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     if let Ok(lid) = block(move || conn.get_leaderboard_id_by_name(&path.0)).await? {
@@ -194,7 +193,7 @@ pub async fn leave_leaderboard(
 pub async fn promote_member(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     promotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
@@ -232,7 +231,7 @@ pub async fn promote_member(
 pub async fn demote_member(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     demotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
@@ -270,7 +269,7 @@ pub async fn demote_member(
 pub async fn kick_member(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     kick: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
@@ -302,7 +301,7 @@ pub async fn kick_member(
 pub async fn regenerate_invite(
     user: UserId,
     path: Path<(String,)>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     if let Ok(lid) = block(move || conn.get_leaderboard_id_by_name(&path.0)).await? {

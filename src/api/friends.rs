@@ -6,17 +6,16 @@ use actix_web::{
 use diesel::result::DatabaseErrorKind;
 
 use crate::{
-    database::DatabaseConnection,
+    database::Database,
     error::TimeError,
     models::{CodingTimeSteps, FriendWithTime, UserId},
-    DbPool,
 };
 
 #[post("/friends/add")]
 pub async fn add_friend(
     user: UserId,
     body: String,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     match block(move || conn.add_friend(user.id, body.trim().trim_start_matches("ttfc_"))).await? {
@@ -51,7 +50,7 @@ pub async fn add_friend(
 }
 
 #[get("/friends/list")]
-pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+pub async fn get_friends(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     match block(move || conn.get_friends(user.id)).await? {
         Ok(friends) => {
@@ -83,7 +82,7 @@ pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responde
 #[post("/friends/regenerate")]
 pub async fn regenerate_friend_code(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     match block(move || db.get()?.regenerate_friend_code(user.id)).await? {
         Ok(code) => Ok(web::Json(json!({ "friend_code": code }))),
@@ -97,7 +96,7 @@ pub async fn regenerate_friend_code(
 #[delete("/friends/remove")]
 pub async fn remove(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
