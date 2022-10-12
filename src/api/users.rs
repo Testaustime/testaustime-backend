@@ -4,13 +4,14 @@ use actix_web::{
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 
 use crate::{
-    database,
+    api::activity::HeartBeatMemoryStore,
+    database::DatabaseConnection,
     error::TimeError,
     models::{UserId, UserIdentity},
-    requests::DataRequest,
+    requests::{DataRequest, HeartBeat},
     utils::group_by_language,
     DbPool,
 };
@@ -35,7 +36,7 @@ pub struct ListLeaderboard {
 #[get("/users/@me/leaderboards")]
 pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
     Ok(web::Json(
-        block(move || database::get_user_leaderboards(&mut db.get()?, user.id)).await??,
+        block(move || db.get()?.get_user_leaderboards(user.id)).await??,
     ))
 }
 
@@ -44,15 +45,61 @@ pub async fn delete_user(
     pool: Data<DbPool>,
     user: web::Json<UserAuthentication>,
 ) -> Result<impl Responder, TimeError> {
-    let clone = pool.clone();
+    let mut conn = pool.get()?;
     if let Some(user) = block(move || {
-        database::verify_user_password(&mut pool.get()?, &user.username, &user.password)
+        pool.get()?
+            .verify_user_password(&user.username, &user.password)
     })
     .await??
     {
-        block(move || database::delete_user(&mut clone.get()?, user.id)).await??;
+        block(move || conn.delete_user(user.id)).await??;
     }
     Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Serialize)]
+pub struct CurrentHeartBeat {
+    pub started: chrono::NaiveDateTime,
+    pub duration: i64,
+    pub heartbeat: HeartBeat,
+}
+
+#[get("/users/{username}/activity/current")]
+pub async fn get_current_activity(
+    path: Path<(String,)>,
+    user: UserId,
+    db: Data<DbPool>,
+    heartbeats: Data<HeartBeatMemoryStore>,
+) -> Result<impl Responder, TimeError> {
+    let mut conn = db.get()?;
+
+    let target_user = if path.0 == "@me" {
+        user.id
+    } else {
+        let target_user = conn.get_user_by_name(&path.0)?;
+        if target_user.id == user.id
+            || target_user.is_public
+            || block(move || conn.are_friends(user.id, target_user.id)).await??
+        {
+            target_user.id
+        } else {
+            return Err(TimeError::Unauthorized);
+        }
+    };
+
+    match heartbeats.get(&target_user) {
+        Some(heartbeat) => {
+            let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+            drop(heartbeat);
+            let current_heartbeat = CurrentHeartBeat {
+                started: start_time,
+                duration: duration.num_seconds(),
+                heartbeat: inner_heartbeat,
+            };
+            Ok(web::Json(Some(current_heartbeat)))
+        }
+        None => Ok(web::Json(None)),
+    }
 }
 
 #[get("/users/{username}/activity/data")]
@@ -65,19 +112,17 @@ pub async fn get_activities(
     let mut conn = db.get()?;
 
     let data = if path.0 == "@me" {
-        block(move || database::get_activity(&mut conn, data.into_inner(), user.id)).await??
+        block(move || conn.get_activity(data.into_inner(), user.id)).await??
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
-        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
+        let target_user = conn.get_user_by_name(&path.0)?;
 
         if target_user.id == user.id
             || target_user.is_public
-            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-                .await??
+            || block(move || conn.are_friends(user.id, target_user.id)).await??
         {
-            block(move || database::get_activity(&mut conn, data.into_inner(), target_user.id))
-                .await??
+            block(move || db.get()?.get_activity(data.into_inner(), target_user.id)).await??
         } else {
             return Err(TimeError::Unauthorized);
         }
@@ -94,35 +139,33 @@ pub async fn get_activity_summary(
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     let data = if path.0 == "@me" {
-        block(move || database::get_all_activity(&mut conn, user.id)).await??
+        block(move || conn.get_all_activity(user.id)).await??
     } else {
-        let target_user = database::get_user_by_name(&mut conn, &path.0)?;
+        let target_user = conn.get_user_by_name(&path.0)?;
 
         if target_user.id == user.id
             || target_user.is_public
-            || block(move || database::are_friends(&mut db.get()?, user.id, target_user.id))
-                .await??
+            || block(move || db.get()?.are_friends(user.id, target_user.id)).await??
         {
-            block(move || database::get_all_activity(&mut conn, target_user.id)).await??
+            block(move || conn.get_all_activity(target_user.id)).await??
         } else {
             return Err(TimeError::Unauthorized);
         }
     };
 
     //FIXME: This does a lot of unnecessary calculations
+    let now = Local::now().naive_local();
+
     let all_time = group_by_language(data.clone().into_iter());
-    let last_month = group_by_language(data.clone().into_iter().take_while(|d| {
-        Local::now()
-            .naive_local()
-            .signed_duration_since(d.start_time)
-            < Duration::days(30)
-    }));
-    let last_week = group_by_language(data.into_iter().take_while(|d| {
-        Local::now()
-            .naive_local()
-            .signed_duration_since(d.start_time)
-            < Duration::days(7)
-    }));
+    let last_month = group_by_language(
+        data.clone()
+            .into_iter()
+            .filter(|d| now.signed_duration_since(d.start_time) < Duration::days(30)),
+    );
+    let last_week = group_by_language(
+        data.into_iter()
+            .filter(|d| now.signed_duration_since(d.start_time) < Duration::days(7)),
+    );
 
     let langs = serde_json::json!({
         "last_week": {

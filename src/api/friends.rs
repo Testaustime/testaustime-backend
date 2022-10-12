@@ -6,7 +6,7 @@ use actix_web::{
 use diesel::result::DatabaseErrorKind;
 
 use crate::{
-    database::{self, get_coding_time_steps, get_user_by_name, remove_friend},
+    database::DatabaseConnection,
     error::TimeError,
     models::{CodingTimeSteps, FriendWithTime, UserId},
     DbPool,
@@ -19,11 +19,7 @@ pub async fn add_friend(
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
-    match block(move || {
-        database::add_friend(&mut conn, user.id, body.trim().trim_start_matches("ttfc_"))
-    })
-    .await?
-    {
+    match block(move || conn.add_friend(user.id, body.trim().trim_start_matches("ttfc_"))).await? {
         // This is not correct
         Err(e) => {
             error!("{}", e);
@@ -39,8 +35,7 @@ pub async fn add_friend(
             let mut conn = db.get()?;
             let friend_with_time = FriendWithTime {
                 username: friend.username.clone(),
-                coding_time: match block(move || get_coding_time_steps(&mut conn, friend.id)).await
-                {
+                coding_time: match block(move || conn.get_coding_time_steps(friend.id)).await {
                     Ok(coding_time_steps) => coding_time_steps,
                     _ => CodingTimeSteps {
                         all_time: 0,
@@ -58,16 +53,14 @@ pub async fn add_friend(
 #[get("/friends/list")]
 pub async fn get_friends(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
-    match block(move || database::get_friends(&mut conn, user.id)).await? {
+    match block(move || conn.get_friends(user.id)).await? {
         Ok(friends) => {
             let friends_with_time = futures::future::join_all(friends.iter().map(|friend| async {
                 let mut conn2 = db.get().unwrap();
                 let friend_id = friend.id;
                 FriendWithTime {
                     username: friend.username.clone(),
-                    coding_time: match block(move || get_coding_time_steps(&mut conn2, friend_id))
-                        .await
-                    {
+                    coding_time: match block(move || conn2.get_coding_time_steps(friend_id)).await {
                         Ok(coding_time_steps) => coding_time_steps,
                         _ => CodingTimeSteps {
                             all_time: 0,
@@ -92,7 +85,7 @@ pub async fn regenerate_friend_code(
     user: UserId,
     db: Data<DbPool>,
 ) -> Result<impl Responder, TimeError> {
-    match block(move || database::regenerate_friend_code(&mut db.get()?, user.id)).await? {
+    match block(move || db.get()?.regenerate_friend_code(user.id)).await? {
         Ok(code) => Ok(web::Json(json!({ "friend_code": code }))),
         Err(e) => {
             error!("{}", e);
@@ -107,9 +100,9 @@ pub async fn remove(
     db: Data<DbPool>,
     body: String,
 ) -> Result<impl Responder, TimeError> {
-    let clone = db.clone();
-    let friend = block(move || get_user_by_name(&mut clone.get()?, &body)).await??;
-    let deleted = block(move || remove_friend(&mut db.get()?, user.id, friend.id)).await??;
+    let mut conn = db.get()?;
+    let friend = block(move || conn.get_user_by_name(&body)).await??;
+    let deleted = block(move || db.get()?.remove_friend(user.id, friend.id)).await??;
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {

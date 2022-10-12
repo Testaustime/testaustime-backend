@@ -1,21 +1,21 @@
 use actix_web::{
     error::*,
-    web::{block, Data, Json},
+    web::{self, block, Data, Json},
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
 use dashmap::DashMap;
+use serde_derive::Deserialize;
 
-use crate::{
-    database::{add_activity, delete_activity},
-    error::TimeError,
-    models::UserId,
-    requests::*,
-    DbPool,
-};
+use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
 
-pub type HeartBeatMemoryStore =
-    DashMap<UserId, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
+pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
+
+#[derive(Deserialize)]
+pub struct RenameRequest {
+    from: String,
+    to: String,
+}
 
 #[post("/update")]
 pub async fn update(
@@ -52,7 +52,7 @@ pub async fn update(
             ));
         }
     }
-    match heartbeats.get(&user) {
+    match heartbeats.get(&user.id) {
         Some(test) => {
             let (inner_heartbeat, start, duration) = test.to_owned();
             drop(test);
@@ -62,29 +62,23 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    let res = match add_activity(
-                        &mut db.get()?,
-                        user.id,
-                        inner_heartbeat,
-                        start,
-                        duration,
-                    ) {
-                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                        Err(e) => Err(ErrorInternalServerError(e)),
-                    }?;
+                    db.get()?
+                        .add_activity(user.id, inner_heartbeat, start, duration)
+                        .map_err(ErrorInternalServerError)?;
+
                     heartbeats.insert(
-                        user,
+                        user.id,
                         (
                             heartbeat.into_inner(),
                             Local::now().naive_local(),
                             Duration::seconds(0),
                         ),
                     );
-                    Ok(res)
+                    Ok(HttpResponse::Ok().body(0i32.to_string()))
                 } else {
                     // Extend current coding session if heartbeat matches and it has been under the maximum duration of a break
                     heartbeats.insert(
-                        user,
+                        user.id,
                         (
                             heartbeat.into_inner(),
                             start,
@@ -95,26 +89,25 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
-                let res =
-                    match add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration) {
-                        Ok(_) => Ok(HttpResponse::Ok().body(0i32.to_string())),
-                        Err(e) => Err(ErrorInternalServerError(e)),
-                    }?;
+                db.get()?
+                    .add_activity(user.id, inner_heartbeat, start, duration)
+                    .map_err(ErrorInternalServerError)?;
+
                 heartbeats.insert(
-                    user,
+                    user.id,
                     (
                         heartbeat.into_inner(),
                         Local::now().naive_local(),
                         Duration::seconds(0),
                     ),
                 );
-                Ok(res)
+                Ok(HttpResponse::Ok().body(0i32.to_string()))
             }
         }
         None => {
             // If the user has not sent a heartbeat during this session
             heartbeats.insert(
-                user,
+                user.id,
                 (
                     heartbeat.into_inner(),
                     Local::now().naive_local(),
@@ -132,22 +125,17 @@ pub async fn flush(
     db: Data<DbPool>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    match heartbeats.get(&user) {
-        Some(flushme) => {
-            let (inner_heartbeat, start, duration) = flushme.to_owned();
-            drop(flushme);
-            heartbeats.remove(&user);
-            match block(move || {
-                add_activity(&mut db.get()?, user.id, inner_heartbeat, start, duration)
-            })
-            .await?
-            {
-                Ok(_) => Ok(HttpResponse::Ok().finish()),
-                Err(e) => Err(e),
-            }
-        }
-        None => Ok(HttpResponse::Ok().finish()),
+    if let Some(heartbeat) = heartbeats.get(&user.id) {
+        let (inner_heartbeat, start, duration) = heartbeat.to_owned();
+        drop(heartbeat);
+        heartbeats.remove(&user.id);
+        block(move || {
+            db.get()?
+                .add_activity(user.id, inner_heartbeat, start, duration)
+        })
+        .await??;
     }
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[delete("/activity/delete")]
@@ -157,11 +145,8 @@ pub async fn delete(
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let deleted = block(move || {
-        delete_activity(
-            &mut db.get()?,
-            user.id,
-            body.parse::<i32>().map_err(ErrorBadRequest)?,
-        )
+        db.get()?
+            .delete_activity(user.id, body.parse::<i32>().map_err(ErrorBadRequest)?)
     })
     .await??;
     if deleted {
@@ -169,4 +154,15 @@ pub async fn delete(
     } else {
         Err(TimeError::BadId)
     }
+}
+
+#[post("/activity/rename")]
+pub async fn rename_project(
+    user: UserId,
+    db: Data<DbPool>,
+    body: Json<RenameRequest>,
+) -> Result<impl Responder, TimeError> {
+    let renamed = block(move || db.get()?.rename_project(user.id, &body.from, &body.to)).await??;
+
+    Ok(web::Json(json!({ "affected_activities": renamed })))
 }

@@ -1,4 +1,4 @@
-#![feature(let_else, once_cell)]
+#![feature(once_cell)]
 
 mod api;
 mod database;
@@ -19,8 +19,10 @@ use actix_web::{
 };
 #[cfg(feature = "testausid")]
 use awc::Client;
-use diesel::{r2d2::ConnectionManager, PgConnection};
-use r2d2::Pool;
+use diesel::{
+    r2d2::{ConnectionManager, Pool},
+    PgConnection,
+};
 use serde_derive::Deserialize;
 use testausratelimiter::*;
 
@@ -47,7 +49,8 @@ pub struct TimeConfig {
     pub allowed_origin: String,
 }
 
-type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
+type DbPool = diesel::r2d2::Pool<ConnectionManager<PgConnection>>;
+type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -110,7 +113,8 @@ async fn main() -> std::io::Result<()> {
                     })
                     .service(api::activity::update)
                     .service(api::activity::delete)
-                    .service(api::activity::flush),
+                    .service(api::activity::flush)
+                    .service(api::activity::rename_project),
             )
             .service(
                 web::resource("/auth/register")
@@ -141,6 +145,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::friends::remove)
                     .service(api::users::my_profile)
                     .service(api::users::get_activities)
+                    .service(api::users::get_current_activity)
                     .service(api::users::delete_user)
                     .service(api::users::my_leaderboards)
                     .service(api::users::get_activity_summary)
