@@ -82,8 +82,7 @@ async fn main() -> std::io::Result<()> {
         #[cfg(feature = "testausid")]
         let client = Client::new();
         let cors = Cors::default()
-            .allowed_origin(&config.allowed_origin)
-            .allowed_origin("https://testaustime.fi")
+            .allow_any_origin()
             .allowed_methods(vec!["GET", "POST", "DELETE"])
             .allowed_headers(vec![
                 http::header::AUTHORIZATION,
