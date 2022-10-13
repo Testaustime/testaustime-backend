@@ -304,7 +304,7 @@ impl DatabaseConnection for DbConnection {
             {
                 Some(String::from("tmp"))
             } else {
-                heartbeat.project_name
+                heartbeat.project_name.map(|s| s.to_lowercase())
             },
             language: heartbeat.language,
             editor_name: heartbeat.editor_name,
