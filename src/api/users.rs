@@ -78,7 +78,10 @@ pub async fn get_current_activity(
     let target_user = if path.0 == "@me" {
         user.id
     } else {
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
+
         if target_user.id == user.id
             || target_user.is_public
             || block(move || conn.are_friends(user.id, target_user.id)).await??
@@ -118,7 +121,9 @@ pub async fn get_activities(
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.id == user.id
             || target_user.is_public
@@ -143,7 +148,9 @@ pub async fn get_activity_summary(
     let data = if path.0 == "@me" {
         block(move || conn.get_all_activity(user.id)).await??
     } else {
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.id == user.id
             || target_user.is_public
