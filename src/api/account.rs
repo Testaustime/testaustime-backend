@@ -4,7 +4,7 @@ use actix_web::{
 };
 use serde_derive::Deserialize;
 
-use crate::{error::TimeError, models::UserId, database::Database};
+use crate::{database::Database, error::TimeError, models::UserId};
 
 #[derive(Deserialize)]
 pub struct Settings {

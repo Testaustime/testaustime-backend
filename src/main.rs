@@ -19,7 +19,7 @@ use actix_web::{
 };
 #[cfg(feature = "testausid")]
 use awc::Client;
-use database::{DatabaseConnectionPool, Database};
+use database::{Database, DatabaseConnectionPool};
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
@@ -67,11 +67,9 @@ async fn main() -> std::io::Result<()> {
         .build(manager)
         .expect("Failed to create connection pool");
 
-    let database = Data::new(
-        Database {
-            backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
-        }
-    );
+    let database = Data::new(Database {
+        backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
+    });
 
     let max_requests = config.max_requests_per_min.unwrap_or(30);
     let max_heartbeats = config.max_heartbeats_per_min.unwrap_or(30);

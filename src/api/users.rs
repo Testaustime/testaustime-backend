@@ -33,7 +33,10 @@ pub struct ListLeaderboard {
 }
 
 #[get("/users/@me/leaderboards")]
-pub async fn my_leaderboards(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
+pub async fn my_leaderboards(
+    user: UserId,
+    db: Data<Database>,
+) -> Result<impl Responder, TimeError> {
     Ok(web::Json(
         block(move || db.get()?.get_user_leaderboards(user.id)).await??,
     ))

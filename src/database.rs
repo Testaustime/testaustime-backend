@@ -3,7 +3,11 @@ use argon2::{
     Argon2,
 };
 use chrono::{prelude::*, Duration};
-use diesel::{insert_into, prelude::*, r2d2::{ConnectionManager, Pool}};
+use diesel::{
+    insert_into,
+    prelude::*,
+    r2d2::{ConnectionManager, Pool},
+};
 
 use crate::{
     error::TimeError,
@@ -33,7 +37,7 @@ impl DatabaseConnectionPool for Pool<ConnectionManager<PgConnection>> {
     }
 }
 
-pub trait DatabaseConnection: Send  {
+pub trait DatabaseConnection: Send {
     fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError>;
 
     fn get_user_by_name(&mut self, target_username: &str) -> Result<UserIdentity, TimeError>;
