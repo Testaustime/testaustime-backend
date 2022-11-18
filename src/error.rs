@@ -47,6 +47,10 @@ pub enum TimeError {
     LastAdmin,
     #[error("Bad code")]
     BadCode,
+    #[error("Literally no idea how this happened")]
+    UnknownError,
+    #[error("You are trying to register again after a short time")]
+    TooManyRegisters
 }
 
 unsafe impl Send for TimeError {}

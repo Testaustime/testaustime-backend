@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use actix_web::{Responder, HttpResponse};
 use regex::Regex;
 
 pub mod account;
@@ -14,3 +15,8 @@ pub mod users;
 
 static VALID_NAME_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("^[[:word:]]{2,32}$").unwrap());
+
+#[get("/health")]
+async fn health() -> impl Responder {
+    HttpResponse::Ok()
+}
