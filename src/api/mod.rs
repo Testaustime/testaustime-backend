@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use actix_web::{Responder, HttpResponse};
+use actix_web::{HttpResponse, Responder};
 use regex::Regex;
 
 pub mod account;

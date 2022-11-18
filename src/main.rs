@@ -1,36 +1,37 @@
 #![feature(once_cell)]
 
 mod api;
+mod auth;
 mod database;
 mod error;
 mod models;
 mod requests;
 mod schema;
 mod utils;
-mod auth;
 
 use actix::Actor;
 use actix_cors::Cors;
 use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
     error::{ErrorBadRequest, QueryPayloadError},
     web,
     web::{Data, QueryConfig},
-    App, HttpServer, dev::{ServiceRequest, ServiceResponse}, HttpMessage,
+    App, HttpMessage, HttpServer,
 };
+use auth::{AuthMiddleware, Authentication};
 #[cfg(feature = "testausid")]
 use awc::Client;
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::{Database, DatabaseConnectionPool};
-use auth::{AuthMiddleware, Authentication};
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
 use serde_derive::Deserialize;
-use tracing::Span;
-use tracing_actix_web::{TracingLogger, RootSpanBuilder, root_span};
 use testausratelimiter::{RateLimiter, RateLimiterStorage};
+use tracing::Span;
+use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
 
 #[macro_use]
 extern crate actix_web;
@@ -55,7 +56,9 @@ pub struct TestaustimeRootSpanBuilder;
 
 impl RootSpanBuilder for TestaustimeRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
-        if let Authentication::AuthToken(user) = request.extensions().get::<Authentication>().unwrap() {
+        if let Authentication::AuthToken(user) =
+            request.extensions().get::<Authentication>().unwrap()
+        {
             root_span!(request, user.id, user.username)
         } else {
             root_span!(request)

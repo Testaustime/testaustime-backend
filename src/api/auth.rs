@@ -1,18 +1,19 @@
 use std::{future::Future, pin::Pin};
 
 use actix_web::{
-    dev::{Payload, ConnectionInfo},
+    dev::{ConnectionInfo, Payload},
     error::*,
     web::{block, Data, Json},
-    FromRequest, HttpRequest, HttpResponse, HttpMessage, Responder,
+    FromRequest, HttpMessage, HttpRequest, HttpResponse, Responder,
 };
 
 use crate::{
+    auth::Authentication,
     database::Database,
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
     requests::*,
-    auth::Authentication, RegisterLimitStorage,
+    RegisterLimitStorage,
 };
 
 impl FromRequest for UserId {
@@ -23,7 +24,7 @@ impl FromRequest for UserId {
         let auth = req.extensions().get::<Authentication>().cloned().unwrap();
         Box::pin(async move {
             if let Authentication::AuthToken(user) = auth {
-                Ok(UserId {id: user.id })
+                Ok(UserId { id: user.id })
             } else {
                 Err(TimeError::Unauthorized)
             }
@@ -111,7 +112,11 @@ pub async fn register(
     let ip = conn_info.peer_addr().ok_or(TimeError::UnknownError)?;
 
     if let Some(res) = rls.get(ip) {
-        if chrono::Local::now().naive_local().signed_duration_since(*res) < chrono::Duration::days(1) {
+        if chrono::Local::now()
+            .naive_local()
+            .signed_duration_since(*res)
+            < chrono::Duration::days(1)
+        {
             return Err(TimeError::TooManyRegisters);
         }
     }

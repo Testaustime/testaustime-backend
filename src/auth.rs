@@ -2,13 +2,15 @@ use std::rc::Rc;
 
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, web::{Data, block}, HttpMessage, error::ErrorUnauthorized,
+    error::ErrorUnauthorized,
+    web::{block, Data},
+    Error, HttpMessage,
 };
 use futures::future::LocalBoxFuture;
 
 use crate::{database::Database, error::TimeError, models::UserIdentity};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {
     NoAuth,
     AuthToken(UserIdentity),
@@ -63,7 +65,7 @@ where
                 let user = block(move || {
                     let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                     db.get()?.get_user_by_token(token)
-                }).await?.map_err(|e| ErrorUnauthorized(e))?;
+                }).await?.map_err(ErrorUnauthorized)?;
 
                 req.extensions_mut().insert(Authentication::AuthToken(user));
 

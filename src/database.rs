@@ -23,7 +23,7 @@ pub struct Database {
 
 impl Database {
     pub fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError> {
-        Ok(self.backend.get()?)
+        self.backend.get()
     }
 }
 

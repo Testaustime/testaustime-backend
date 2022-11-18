@@ -50,7 +50,7 @@ pub enum TimeError {
     #[error("Literally no idea how this happened")]
     UnknownError,
     #[error("You are trying to register again after a short time")]
-    TooManyRegisters
+    TooManyRegisters,
 }
 
 unsafe impl Send for TimeError {}
