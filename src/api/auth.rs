@@ -65,8 +65,7 @@ pub async fn login(
     .await?
     {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
-        Ok(None) => Err(TimeError::Unauthorized),
-        Err(e) => Err(e),
+        _ => Err(TimeError::InvalidCredentials),
     }
 }
 
