@@ -13,12 +13,15 @@ testausid = ["dep:awc"]
 lto = true
 
 [dependencies]
-actix-web = { version = "4.0.1", features = ["macros", "rustls"] }
+actix-web = { version = "4.2.1", features = ["macros", "rustls"] }
 actix = "0.13"
 awc = { version = "3.0.0", features = ["rustls"], optional = true }
 actix-cors = "0.6"
 http = "0.2"
 regex = "1.5"
+
+tracing = "0.1.37"
+tracing-actix-web = "0.6.2"
 
 diesel = { version = "2.0.0", features = ["postgres", "chrono", "r2d2", "serde_json"] }
 r2d2 = "0.8"

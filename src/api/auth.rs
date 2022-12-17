@@ -1,39 +1,30 @@
 use std::{future::Future, pin::Pin};
 
 use actix_web::{
-    dev::Payload,
+    dev::{ConnectionInfo, Payload},
     error::*,
     web::{block, Data, Json},
-    FromRequest, HttpRequest, HttpResponse, Responder,
+    FromRequest, HttpMessage, HttpRequest, HttpResponse, Responder,
 };
 
 use crate::{
-    database::DatabaseConnection,
+    auth::Authentication,
+    database::Database,
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
     requests::*,
-    DbPool,
+    RegisterLimitStorage,
 };
 
 impl FromRequest for UserId {
     type Error = TimeError;
-    type Future = Pin<Box<dyn Future<Output = actix_web::Result<UserId, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
 
-    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let db = Data::<DbPool>::extract(req);
-        let auth = req.headers().get("Authorization").cloned();
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let auth = req.extensions().get::<Authentication>().cloned().unwrap();
         Box::pin(async move {
-            if let Some(auth) = auth {
-                let db: Data<DbPool> = db.await?;
-                let user = block(move || {
-                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ").to_owned() else { return Err(TimeError::Unauthorized) };
-                    db.get()?.get_user_by_token(token)
-                }).await?;
-                if let Ok(user) = user {
-                    Ok(UserId { id: user.id })
-                } else {
-                    Err(TimeError::Unauthorized)
-                }
+            if let Authentication::AuthToken(user) = auth {
+                Ok(UserId { id: user.id })
             } else {
                 Err(TimeError::Unauthorized)
             }
@@ -46,20 +37,10 @@ impl FromRequest for UserIdentity {
     type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let db = Data::extract(req);
-        let auth = req.headers().get("Authorization").cloned();
+        let auth = req.extensions().get::<Authentication>().cloned().unwrap();
         Box::pin(async move {
-            if let Some(auth) = auth {
-                let db: Data<DbPool> = db.await?;
-                let user = block(move || {
-                    let Some(token) = auth.to_str().unwrap().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    db.get()?.get_user_by_token(token)
-                }).await?;
-                if let Ok(user) = user {
-                    Ok(user)
-                } else {
-                    Err(TimeError::Unauthorized)
-                }
+            if let Authentication::AuthToken(user) = auth {
+                Ok(user)
             } else {
                 Err(TimeError::Unauthorized)
             }
@@ -70,7 +51,7 @@ impl FromRequest for UserIdentity {
 #[post("/auth/login")]
 pub async fn login(
     data: Json<RegisterRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -84,13 +65,12 @@ pub async fn login(
     .await?
     {
         Ok(Some(user)) => Ok(Json(SelfUser::from(user))),
-        Ok(None) => Err(TimeError::Unauthorized),
-        Err(e) => Err(e),
+        _ => Err(TimeError::InvalidCredentials),
     }
 }
 
 #[post("/auth/regenerate")]
-pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+pub async fn regenerate(user: UserId, db: Data<Database>) -> Result<impl Responder, TimeError> {
     match block(move || db.get()?.regenerate_token(user.id)).await? {
         Ok(token) => {
             let token = json!({ "token": token });
@@ -103,9 +83,12 @@ pub async fn regenerate(user: UserId, db: Data<DbPool>) -> Result<impl Responder
     }
 }
 
+#[post("/auth/register")]
 pub async fn register(
+    conn_info: ConnectionInfo,
     data: Json<RegisterRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
+    rls: Data<RegisterLimitStorage>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -125,20 +108,34 @@ pub async fn register(
         return Err(TimeError::UserExists);
     }
 
-    Ok(Json(
-        block(move || {
-            db.get()?
-                .new_testaustime_user(&data.username, &data.password)
-        })
-        .await??,
-    ))
+    let ip = conn_info.peer_addr().ok_or(TimeError::UnknownError)?;
+
+    if let Some(res) = rls.get(ip) {
+        if chrono::Local::now()
+            .naive_local()
+            .signed_duration_since(*res)
+            < chrono::Duration::days(1)
+        {
+            return Err(TimeError::TooManyRegisters);
+        }
+    }
+
+    let res = block(move || {
+        db.get()?
+            .new_testaustime_user(&data.username, &data.password)
+    })
+    .await??;
+
+    rls.insert(ip.to_string(), chrono::Local::now().naive_local());
+
+    Ok(Json(res))
 }
 
 #[post("/auth/changeusername")]
 pub async fn changeusername(
     userid: UserId,
     data: Json<UsernameChangeRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 2 || data.new.len() > 32 {
         return Err(TimeError::InvalidLength(
@@ -167,7 +164,7 @@ pub async fn changeusername(
 pub async fn changepassword(
     user: UserIdentity,
     data: Json<PasswordChangeRequest>,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     if data.new.len() < 8 || data.new.len() > 128 {
         return Err(TimeError::InvalidLength(

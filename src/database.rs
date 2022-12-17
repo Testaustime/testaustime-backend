@@ -3,7 +3,11 @@ use argon2::{
     Argon2,
 };
 use chrono::{prelude::*, Duration};
-use diesel::{insert_into, prelude::*};
+use diesel::{
+    insert_into,
+    prelude::*,
+    r2d2::{ConnectionManager, Pool},
+};
 
 use crate::{
     error::TimeError,
@@ -13,7 +17,27 @@ use crate::{
     DbConnection,
 };
 
-pub trait DatabaseConnection {
+pub struct Database {
+    pub backend: Box<dyn DatabaseConnectionPool>,
+}
+
+impl Database {
+    pub fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError> {
+        self.backend.get()
+    }
+}
+
+pub trait DatabaseConnectionPool: Send + Sync {
+    fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError>;
+}
+
+impl DatabaseConnectionPool for Pool<ConnectionManager<PgConnection>> {
+    fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError> {
+        Ok(Box::new(self.get()?))
+    }
+}
+
+pub trait DatabaseConnection: Send {
     fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError>;
 
     fn get_user_by_name(&mut self, target_username: &str) -> Result<UserIdentity, TimeError>;
@@ -284,7 +308,7 @@ impl DatabaseConnection for DbConnection {
             {
                 Some(String::from("tmp"))
             } else {
-                heartbeat.project_name
+                heartbeat.project_name.map(|s| s.to_lowercase())
             },
             language: heartbeat.language,
             editor_name: heartbeat.editor_name,
@@ -767,7 +791,7 @@ impl DatabaseConnection for DbConnection {
         use crate::schema::user_identities::dsl::*;
         Ok(user_identities
             .filter(is_public.eq(true))
-            .filter(username.like(format!("%{}%", search)))
+            .filter(username.like(format!("%{search}%")))
             .load::<UserIdentity>(self)?
             .into_iter()
             .map(|u| u.into())

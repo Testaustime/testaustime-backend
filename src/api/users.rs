@@ -8,12 +8,11 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::{
     api::activity::HeartBeatMemoryStore,
-    database::DatabaseConnection,
+    database::Database,
     error::TimeError,
     models::{UserId, UserIdentity},
     requests::{DataRequest, HeartBeat},
     utils::group_by_language,
-    DbPool,
 };
 
 #[derive(Deserialize)]
@@ -34,7 +33,10 @@ pub struct ListLeaderboard {
 }
 
 #[get("/users/@me/leaderboards")]
-pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Responder, TimeError> {
+pub async fn my_leaderboards(
+    user: UserId,
+    db: Data<Database>,
+) -> Result<impl Responder, TimeError> {
     Ok(web::Json(
         block(move || db.get()?.get_user_leaderboards(user.id)).await??,
     ))
@@ -42,7 +44,7 @@ pub async fn my_leaderboards(user: UserId, db: Data<DbPool>) -> Result<impl Resp
 
 #[delete("/users/@me/delete")]
 pub async fn delete_user(
-    pool: Data<DbPool>,
+    pool: Data<Database>,
     user: web::Json<UserAuthentication>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = pool.get()?;
@@ -68,7 +70,7 @@ pub struct CurrentHeartBeat {
 pub async fn get_current_activity(
     path: Path<(String,)>,
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
@@ -76,7 +78,10 @@ pub async fn get_current_activity(
     let target_user = if path.0 == "@me" {
         user.id
     } else {
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
+
         if target_user.id == user.id
             || target_user.is_public
             || block(move || conn.are_friends(user.id, target_user.id)).await??
@@ -107,7 +112,7 @@ pub async fn get_activities(
     data: Query<DataRequest>,
     path: Path<(String,)>,
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
 
@@ -116,7 +121,9 @@ pub async fn get_activities(
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.id == user.id
             || target_user.is_public
@@ -135,13 +142,15 @@ pub async fn get_activities(
 pub async fn get_activity_summary(
     path: Path<(String,)>,
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
     let data = if path.0 == "@me" {
         block(move || conn.get_all_activity(user.id)).await??
     } else {
-        let target_user = conn.get_user_by_name(&path.0)?;
+        let target_user = conn
+            .get_user_by_name(&path.0)
+            .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.id == user.id
             || target_user.is_public

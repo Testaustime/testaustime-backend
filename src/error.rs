@@ -27,6 +27,8 @@ pub enum TimeError {
     LeaderboardNotFound,
     #[error("You are not authorized")]
     Unauthorized,
+    #[error("Invalid username or password")]
+    InvalidCredentials,
     #[error(transparent)]
     BlockingError(#[from] BlockingError),
     #[error("{0}")]
@@ -47,6 +49,10 @@ pub enum TimeError {
     LastAdmin,
     #[error("Bad code")]
     BadCode,
+    #[error("Literally no idea how this happened")]
+    UnknownError,
+    #[error("You are trying to register again after a short time")]
+    TooManyRegisters,
 }
 
 unsafe impl Send for TimeError {}
@@ -67,7 +73,7 @@ impl ResponseError for TimeError {
             | TimeError::AlreadyMember
             | TimeError::NotMember
             | TimeError::LastAdmin => StatusCode::FORBIDDEN,
-            TimeError::Unauthorized => StatusCode::UNAUTHORIZED,
+            TimeError::Unauthorized | TimeError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -75,6 +81,6 @@ impl ResponseError for TimeError {
     fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code())
             .insert_header(ContentType::json())
-            .body(json!({ "error": format!("{}", self) }).to_string())
+            .body(json!({ "error": self.to_string() }).to_string())
     }
 }

@@ -7,7 +7,7 @@ use chrono::{Duration, Local};
 use dashmap::DashMap;
 use serde_derive::Deserialize;
 
-use crate::{database::DatabaseConnection, error::TimeError, models::UserId, requests::*, DbPool};
+use crate::{database::Database, error::TimeError, models::UserId, requests::*};
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
@@ -21,7 +21,7 @@ pub struct RenameRequest {
 pub async fn update(
     user: UserId,
     heartbeat: Json<HeartBeat>,
-    db: Data<DbPool>,
+    db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(project) = &heartbeat.project_name {
@@ -53,17 +53,16 @@ pub async fn update(
         }
     }
     match heartbeats.get(&user.id) {
-        Some(test) => {
-            let (inner_heartbeat, start, duration) = test.to_owned();
-            drop(test);
-            let (start, duration) = (start, duration);
+        Some(activity) => {
+            let (current_heartbeat, start, mut duration) = activity.to_owned();
+            drop(activity);
             let curtime = Local::now().naive_local();
-            if heartbeat.eq(&inner_heartbeat) {
+            if heartbeat.eq(&current_heartbeat) {
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
                     db.get()?
-                        .add_activity(user.id, inner_heartbeat, start, duration)
+                        .add_activity(user.id, current_heartbeat, start, duration)
                         .map_err(ErrorInternalServerError)?;
 
                     heartbeats.insert(
@@ -89,8 +88,12 @@ pub async fn update(
                 }
             } else {
                 // Flush current session and start new session if heartbeat changes
+                if curtime.signed_duration_since(start + duration) < Duration::seconds(30) {
+                    duration = curtime.signed_duration_since(start);
+                }
+
                 db.get()?
-                    .add_activity(user.id, inner_heartbeat, start, duration)
+                    .add_activity(user.id, current_heartbeat, start, duration)
                     .map_err(ErrorInternalServerError)?;
 
                 heartbeats.insert(
@@ -122,7 +125,7 @@ pub async fn update(
 #[post("/flush")]
 pub async fn flush(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(heartbeat) = heartbeats.get(&user.id) {
@@ -141,7 +144,7 @@ pub async fn flush(
 #[delete("/activity/delete")]
 pub async fn delete(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let deleted = block(move || {
@@ -159,7 +162,7 @@ pub async fn delete(
 #[post("/activity/rename")]
 pub async fn rename_project(
     user: UserId,
-    db: Data<DbPool>,
+    db: Data<Database>,
     body: Json<RenameRequest>,
 ) -> Result<impl Responder, TimeError> {
     let renamed = block(move || db.get()?.rename_project(user.id, &body.from, &body.to)).await??;

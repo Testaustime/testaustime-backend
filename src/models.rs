@@ -6,7 +6,7 @@ pub struct UserId {
     pub id: i32,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize)]
+#[derive(Queryable, Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct UserIdentity {
     pub id: i32,
     #[serde(skip_serializing)]

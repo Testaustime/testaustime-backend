@@ -1,6 +1,7 @@
 #![feature(once_cell)]
 
 mod api;
+mod auth;
 mod database;
 mod error;
 mod models;
@@ -8,23 +9,29 @@ mod requests;
 mod schema;
 mod utils;
 
-use actix::prelude::*;
+use actix::Actor;
 use actix_cors::Cors;
 use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
     error::{ErrorBadRequest, QueryPayloadError},
-    middleware::Logger,
     web,
     web::{Data, QueryConfig},
-    App, HttpServer,
+    App, HttpMessage, HttpServer,
 };
+use auth::{AuthMiddleware, Authentication};
 #[cfg(feature = "testausid")]
 use awc::Client;
+use chrono::NaiveDateTime;
+use dashmap::DashMap;
+use database::{Database, DatabaseConnectionPool};
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
 use serde_derive::Deserialize;
-use testausratelimiter::*;
+use testausratelimiter::{RateLimiter, RateLimiterStorage};
+use tracing::Span;
+use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
 
 #[macro_use]
 extern crate actix_web;
@@ -40,17 +47,30 @@ extern crate serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
-    pub ratelimit_by_peer_ip: Option<bool>,
-    pub max_requests_per_min: Option<usize>,
-    pub max_heartbeats_per_min: Option<usize>,
-    pub max_registers_per_day: Option<usize>,
     pub address: String,
     pub database_url: String,
     pub allowed_origin: String,
 }
 
-type DbPool = diesel::r2d2::Pool<ConnectionManager<PgConnection>>;
+pub struct TestaustimeRootSpanBuilder;
+
+impl RootSpanBuilder for TestaustimeRootSpanBuilder {
+    fn on_request_start(request: &ServiceRequest) -> Span {
+        if let Authentication::AuthToken(user) =
+            request.extensions().get::<Authentication>().unwrap()
+        {
+            root_span!(request, user.id, user.username)
+        } else {
+            root_span!(request)
+        }
+    }
+
+    fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
+}
+
 type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+
+type RegisterLimitStorage = DashMap<String, NaiveDateTime>;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -62,24 +82,25 @@ async fn main() -> std::io::Result<()> {
             .expect("Invalid Toml in settings.toml");
 
     let manager = ConnectionManager::<PgConnection>::new(config.database_url);
-    let pool = Data::new(
-        Pool::builder()
-            .build(manager)
-            .expect("Failed to create connection pool"),
-    );
 
-    let max_requests = config.max_requests_per_min.unwrap_or(30);
-    let max_heartbeats = config.max_heartbeats_per_min.unwrap_or(30);
-    let max_registers = config.max_registers_per_day.unwrap_or(3);
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create connection pool");
+
+    let database = Data::new(Database {
+        backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
+    });
+
+    let register_limiter = Data::new(RegisterLimitStorage::new());
+
+    let ratelimiter = RateLimiterStorage::new(20, 60).start();
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
-    let ratelimiter = RateLimiterStorage::new(max_requests, 60).start();
-    let heartbeat_ratelimiter = RateLimiterStorage::new(max_heartbeats, 60).start();
-    let registers_ratelimiter = RateLimiterStorage::new(max_registers, 86400).start();
 
     HttpServer::new(move || {
         #[cfg(feature = "testausid")]
+        let tracing = TracingLogger::<TestaustimeRootSpanBuilder>::new();
         let client = Client::new();
         let cors = Cors::default()
             .allow_any_origin()
@@ -91,47 +112,31 @@ async fn main() -> std::io::Result<()> {
             ])
             .max_age(3600);
         let query_config = QueryConfig::default().error_handler(|err, _| match err {
-            QueryPayloadError::Deserialize(e) => {
-                ErrorBadRequest(json!({ "error": format!("{}", e) }))
-            }
+            QueryPayloadError::Deserialize(e) => ErrorBadRequest(json!({ "error": e.to_string() })),
             _ => unreachable!(),
         });
         let app = App::new()
+            .app_data(Data::clone(&register_limiter))
             .app_data(query_config)
             .wrap(cors)
-            .wrap(Logger::new(
-                r#"%{r}a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %Dms"#,
-            ))
-            .service(
-                web::scope("/activity")
-                    .wrap(RateLimiter {
-                        storage: heartbeat_ratelimiter.clone(),
-                        use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: max_heartbeats,
-                        reset_interval: 60,
-                    })
-                    .service(api::activity::update)
-                    .service(api::activity::delete)
-                    .service(api::activity::flush)
-                    .service(api::activity::rename_project),
-            )
-            .service(
-                web::resource("/auth/register")
-                    .wrap(RateLimiter {
-                        storage: registers_ratelimiter.clone(),
-                        use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: max_registers,
-                        reset_interval: 86400,
-                    })
-                    .route(web::post().to(api::auth::register)),
-            )
+            .service(api::health)
+            .service(api::auth::register)
             .service({
                 let scope = web::scope("")
+                    .wrap(tracing)
+                    .wrap(AuthMiddleware)
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
-                        use_peer_addr: config.ratelimit_by_peer_ip.unwrap_or(true),
-                        maxrpm: max_requests,
+                        use_peer_addr: false,
+                        maxrpm: 20,
                         reset_interval: 60,
+                    })
+                    .service({
+                        web::scope("/activity")
+                            .service(api::activity::update)
+                            .service(api::activity::delete)
+                            .service(api::activity::flush)
+                            .service(api::activity::rename_project)
                     })
                     .service(api::auth::login)
                     .service(api::auth::regenerate)
@@ -168,7 +173,7 @@ async fn main() -> std::io::Result<()> {
                 }
             })
             .app_data(Data::clone(&leaderboard_cache))
-            .app_data(Data::clone(&pool))
+            .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store));
         #[cfg(feature = "testausid")]
         {

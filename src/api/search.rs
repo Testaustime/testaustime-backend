@@ -4,7 +4,7 @@ use actix_web::{
 };
 use serde_derive::Deserialize;
 
-use crate::{database::DatabaseConnection, error::TimeError, DbPool};
+use crate::{database::Database, error::TimeError};
 
 #[derive(Deserialize)]
 pub struct UserSearch {
@@ -14,7 +14,7 @@ pub struct UserSearch {
 //TODO: Maybe return small coding summary?
 #[get("/search/users")]
 pub async fn search_public_users(
-    db: Data<DbPool>,
+    db: Data<Database>,
     search: Query<UserSearch>,
 ) -> Result<impl Responder, TimeError> {
     Ok(Json(db.get()?.search_public_users(&search.keyword)?))
