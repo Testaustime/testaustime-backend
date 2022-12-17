@@ -114,7 +114,7 @@ async fn main() -> std::io::Result<()> {
             .max_age(3600);
         let query_config = QueryConfig::default().error_handler(|err, _| match err {
             QueryPayloadError::Deserialize(e) => {
-                ErrorBadRequest(json!({ "error": format!("{}", e) }))
+                ErrorBadRequest(json!({ "error": e.to_string() }))
             }
             _ => unreachable!(),
         });

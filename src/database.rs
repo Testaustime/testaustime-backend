@@ -791,7 +791,7 @@ impl DatabaseConnection for DbConnection {
         use crate::schema::user_identities::dsl::*;
         Ok(user_identities
             .filter(is_public.eq(true))
-            .filter(username.like(format!("%{}%", search)))
+            .filter(username.like(format!("%{search}%")))
             .load::<UserIdentity>(self)?
             .into_iter()
             .map(|u| u.into())

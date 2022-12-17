@@ -2,9 +2,7 @@ use std::rc::Rc;
 
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::ErrorUnauthorized,
-    web::{block, Data},
-    Error, HttpMessage,
+    Error, web::{Data, block}, HttpMessage, error::ErrorUnauthorized,
 };
 use futures::future::LocalBoxFuture;
 
@@ -68,16 +66,12 @@ where
                 }).await?.map_err(ErrorUnauthorized)?;
 
                 req.extensions_mut().insert(Authentication::AuthToken(user));
-
-                let resp = service.call(req).await?;
-
-                Ok(resp)
             } else {
                 req.extensions_mut().insert(Authentication::NoAuth);
-                let resp = service.call(req).await?;
-
-                Ok(resp)
             }
+            let resp = service.call(req).await?;
+
+            Ok(resp)
         })
     }
 }
