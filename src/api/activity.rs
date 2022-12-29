@@ -141,7 +141,7 @@ pub async fn flush(
     Ok(HttpResponse::Ok().finish())
 }
 
-#[delete("/activity/delete")]
+#[delete("/delete")]
 pub async fn delete(
     user: UserId,
     db: Data<Database>,
@@ -159,7 +159,7 @@ pub async fn delete(
     }
 }
 
-#[post("/activity/rename")]
+#[post("/rename")]
 pub async fn rename_project(
     user: UserId,
     db: Data<Database>,
