@@ -65,6 +65,7 @@ pub struct SelfUser {
     pub friend_code: String,
     pub username: String,
     pub registration_time: chrono::NaiveDateTime,
+    pub is_public: bool,
 }
 
 impl From<UserIdentity> for SelfUser {
@@ -75,6 +76,7 @@ impl From<UserIdentity> for SelfUser {
             friend_code: u.friend_code,
             username: u.username,
             registration_time: u.registration_time,
+            is_public: u.is_public,
         }
     }
 }
