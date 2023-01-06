@@ -66,13 +66,13 @@ impl ResponseError for TimeError {
             | TimeError::InvalidLength(_)
             | TimeError::BadId
             | TimeError::BadLeaderboardName => StatusCode::BAD_REQUEST,
-            TimeError::CurrentUser
-            | TimeError::UserExists
-            | TimeError::AlreadyFriends
+            TimeError::CurrentUser | TimeError::NotMember | TimeError::LastAdmin => {
+                StatusCode::FORBIDDEN
+            }
+            TimeError::AlreadyFriends
             | TimeError::LeaderboardExists
             | TimeError::AlreadyMember
-            | TimeError::NotMember
-            | TimeError::LastAdmin => StatusCode::FORBIDDEN,
+            | TimeError::UserExists => StatusCode::CONFLICT,
             TimeError::Unauthorized | TimeError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
