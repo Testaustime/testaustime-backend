@@ -74,6 +74,7 @@ impl ResponseError for TimeError {
             | TimeError::AlreadyMember
             | TimeError::UserExists => StatusCode::CONFLICT,
             TimeError::Unauthorized | TimeError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            TimeError::TooManyRegisters => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
