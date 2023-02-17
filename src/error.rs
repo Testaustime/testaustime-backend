@@ -53,6 +53,8 @@ pub enum TimeError {
     UnknownError,
     #[error("You are trying to register again after a short time")]
     TooManyRegisters,
+    #[error("The user has no active session")]
+    NotActive,
 }
 
 unsafe impl Send for TimeError {}
@@ -61,7 +63,9 @@ impl ResponseError for TimeError {
     fn status_code(&self) -> StatusCode {
         error!("{}", self);
         match self {
-            TimeError::UserNotFound | TimeError::LeaderboardNotFound => StatusCode::NOT_FOUND,
+            TimeError::UserNotFound | TimeError::LeaderboardNotFound | TimeError::NotActive => {
+                StatusCode::NOT_FOUND
+            }
             TimeError::BadUsername
             | TimeError::InvalidLength(_)
             | TimeError::BadId
