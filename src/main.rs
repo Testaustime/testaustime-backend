@@ -47,6 +47,8 @@ extern crate serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
+    pub ratelimit_by_peer_ip: bool,
+    pub max_requests_per_min: usize,
     pub address: String,
     pub database_url: String,
     pub allowed_origin: String,
@@ -70,7 +72,10 @@ impl RootSpanBuilder for TestaustimeRootSpanBuilder {
 
 type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
-type RegisterLimitStorage = DashMap<String, NaiveDateTime>;
+pub struct RegisterLimiter {
+    pub limit_by_peer_ip: bool,
+    pub storage: DashMap<String, NaiveDateTime>,
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -91,7 +96,10 @@ async fn main() -> std::io::Result<()> {
         backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
     });
 
-    let register_limiter = Data::new(RegisterLimitStorage::new());
+    let register_limiter = Data::new(RegisterLimiter {
+        limit_by_peer_ip: config.ratelimit_by_peer_ip,
+        storage: DashMap::new(),
+    });
 
     let ratelimiter = RateLimiterStorage::new(20, 60).start();
 
@@ -127,8 +135,8 @@ async fn main() -> std::io::Result<()> {
                     .wrap(AuthMiddleware)
                     .wrap(RateLimiter {
                         storage: ratelimiter.clone(),
-                        use_peer_addr: false,
-                        maxrpm: 20,
+                        use_peer_addr: config.ratelimit_by_peer_ip,
+                        maxrpm: config.max_requests_per_min,
                         reset_interval: 60,
                     })
                     .service({

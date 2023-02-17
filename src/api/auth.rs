@@ -13,7 +13,7 @@ use crate::{
     error::TimeError,
     models::{SelfUser, UserId, UserIdentity},
     requests::*,
-    RegisterLimitStorage,
+    RegisterLimiter,
 };
 
 impl FromRequest for UserId {
@@ -88,7 +88,7 @@ pub async fn register(
     conn_info: ConnectionInfo,
     data: Json<RegisterRequest>,
     db: Data<Database>,
-    rls: Data<RegisterLimitStorage>,
+    rls: Data<RegisterLimiter>,
 ) -> Result<impl Responder, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
@@ -108,9 +108,15 @@ pub async fn register(
         return Err(TimeError::UserExists);
     }
 
-    let ip = conn_info.peer_addr().ok_or(TimeError::UnknownError)?;
+    let ip = if rls.limit_by_peer_ip {
+        conn_info.peer_addr().ok_or(TimeError::UnknownError)?
+    } else {
+        conn_info
+            .realip_remote_addr()
+            .ok_or(TimeError::UnknownError)?
+    };
 
-    if let Some(res) = rls.get(ip) {
+    if let Some(res) = rls.storage.get(ip) {
         if chrono::Local::now()
             .naive_local()
             .signed_duration_since(*res)
@@ -126,7 +132,8 @@ pub async fn register(
     })
     .await??;
 
-    rls.insert(ip.to_string(), chrono::Local::now().naive_local());
+    rls.storage
+        .insert(ip.to_string(), chrono::Local::now().naive_local());
 
     Ok(Json(res))
 }
