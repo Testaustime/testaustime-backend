@@ -103,7 +103,7 @@ pub async fn get_current_activity(
             };
             Ok(web::Json(Some(current_heartbeat)))
         }
-        None => Ok(web::Json(None)),
+        None => Err(TimeError::NotActive),
     }
 }
 
