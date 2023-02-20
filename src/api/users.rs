@@ -4,14 +4,14 @@ use actix_web::{
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
 
 use crate::{
     api::activity::HeartBeatMemoryStore,
     database::Database,
     error::TimeError,
-    models::{UserId, UserIdentity},
-    requests::{DataRequest, HeartBeat},
+    models::{CurrentHeartBeat, UserId, UserIdentity},
+    requests::DataRequest,
     utils::group_by_language,
 };
 
@@ -57,13 +57,6 @@ pub async fn delete_user(
         block(move || conn.delete_user(user.id)).await??;
     }
     Ok(HttpResponse::Ok().finish())
-}
-
-#[derive(Serialize)]
-pub struct CurrentHeartBeat {
-    pub started: chrono::NaiveDateTime,
-    pub duration: i64,
-    pub heartbeat: HeartBeat,
 }
 
 #[get("/users/{username}/activity/current")]
