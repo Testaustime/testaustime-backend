@@ -215,7 +215,7 @@ pub struct CodingTimeSteps {
 }
 
 #[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone)]
-pub struct CurrentHeartBeat {
+pub struct CurrentActivity {
     pub started: chrono::NaiveDateTime,
     pub duration: i64,
     pub heartbeat: HeartBeat,
@@ -225,5 +225,5 @@ pub struct CurrentHeartBeat {
 pub struct FriendWithTimeAndStatus {
     pub username: String,
     pub coding_time: CodingTimeSteps,
-    pub status: Option<CurrentHeartBeat>,
+    pub status: Option<CurrentActivity>,
 }

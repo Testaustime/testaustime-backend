@@ -10,7 +10,7 @@ use crate::{
     api::activity::HeartBeatMemoryStore,
     database::Database,
     error::TimeError,
-    models::{CurrentHeartBeat, UserId, UserIdentity},
+    models::{CurrentActivity, UserId, UserIdentity},
     requests::DataRequest,
     utils::group_by_language,
 };
@@ -89,7 +89,7 @@ pub async fn get_current_activity(
         Some(heartbeat) => {
             let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
             drop(heartbeat);
-            let current_heartbeat = CurrentHeartBeat {
+            let current_heartbeat = CurrentActivity {
                 started: start_time,
                 duration: duration.num_seconds(),
                 heartbeat: inner_heartbeat,

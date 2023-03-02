@@ -9,7 +9,7 @@ use crate::{
     api::activity::HeartBeatMemoryStore,
     database::Database,
     error::TimeError,
-    models::{CodingTimeSteps, CurrentHeartBeat, FriendWithTimeAndStatus, UserId},
+    models::{CodingTimeSteps, CurrentActivity, FriendWithTimeAndStatus, UserId},
 };
 
 #[post("/friends/add")]
@@ -47,7 +47,7 @@ pub async fn add_friend(
                 status: heartbeats.get(&friend.id).map(|heartbeat| {
                     let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                     drop(heartbeat);
-                    CurrentHeartBeat {
+                    CurrentActivity {
                         started: start_time,
                         duration: duration.num_seconds(),
                         heartbeat: inner_heartbeat,
@@ -85,7 +85,7 @@ pub async fn get_friends(
                     status: heartbeats.get(&friend_id).map(|heartbeat| {
                         let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                         drop(heartbeat);
-                        CurrentHeartBeat {
+                        CurrentActivity {
                             started: start_time,
                             duration: duration.num_seconds(),
                             heartbeat: inner_heartbeat,
