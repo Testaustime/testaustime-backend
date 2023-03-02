@@ -44,19 +44,15 @@ pub async fn add_friend(
                         past_week: 0,
                     },
                 },
-                status: match heartbeats.get(&friend.id) {
-                    Some(heartbeat) => {
-                        let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
-                        drop(heartbeat);
-                        let current_heartbeat = CurrentHeartBeat {
-                            started: start_time,
-                            duration: duration.num_seconds(),
-                            heartbeat: inner_heartbeat,
-                        };
-                        Some(current_heartbeat)
+                status: heartbeats.get(&friend.id).map(|heartbeat| {
+                    let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+                    drop(heartbeat);
+                    CurrentHeartBeat {
+                        started: start_time,
+                        duration: duration.num_seconds(),
+                        heartbeat: inner_heartbeat,
                     }
-                    None => None,
-                },
+                }),
             };
 
             Ok(web::Json(friend_with_time))
@@ -86,19 +82,15 @@ pub async fn get_friends(
                             past_week: 0,
                         },
                     },
-                    status: match heartbeats.get(&friend_id) {
-                        Some(heartbeat) => {
-                            let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
-                            drop(heartbeat);
-                            let current_heartbeat = CurrentHeartBeat {
-                                started: start_time,
-                                duration: duration.num_seconds(),
-                                heartbeat: inner_heartbeat,
-                            };
-                            Some(current_heartbeat)
+                    status: heartbeats.get(&friend_id).map(|heartbeat| {
+                        let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+                        drop(heartbeat);
+                        CurrentHeartBeat {
+                            started: start_time,
+                            duration: duration.num_seconds(),
+                            heartbeat: inner_heartbeat,
                         }
-                        None => None,
-                    },
+                    }),
                 }
             }))
             .await;
