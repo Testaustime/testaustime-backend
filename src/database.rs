@@ -150,6 +150,10 @@ pub trait DatabaseConnection: Send {
     fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError>;
 
     fn rename_project(&mut self, user_id: i32, from: &str, to: &str) -> Result<usize, TimeError>;
+
+    fn get_total_user_count(&mut self) -> Result<u64, TimeError>;
+
+    fn get_total_coding_hours(&mut self) -> Result<u64, TimeError>;
 }
 
 impl DatabaseConnection for DbConnection {
@@ -810,5 +814,23 @@ impl DatabaseConnection for DbConnection {
             .filter(project_name.eq(from))
             .set(project_name.eq(to))
             .execute(self)?)
+    }
+
+    fn get_total_user_count(&mut self) -> Result<u64, TimeError> {
+        use crate::schema::user_identities::dsl::*;
+        Ok(user_identities.count().first::<i64>(self)? as u64)
+    }
+
+    fn get_total_coding_hours(&mut self) -> Result<u64, TimeError> {
+        use diesel::dsl::sum;
+
+        use crate::schema::coding_activities::dsl::*;
+
+        let dur: i64 = coding_activities
+            .select(sum(duration))
+            .first::<Option<i64>>(self)?
+            .unwrap_or_default();
+
+        Ok((dur / 3600) as u64)
     }
 }
