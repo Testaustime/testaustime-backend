@@ -48,6 +48,28 @@ impl FromRequest for UserIdentity {
     }
 }
 
+pub struct UserIdentityOptional {
+    pub identity: Option<UserIdentity>,
+}
+
+impl FromRequest for UserIdentityOptional {
+    type Error = TimeError;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let auth = req.extensions().get::<Authentication>().cloned().unwrap();
+        Box::pin(async move {
+            if let Authentication::AuthToken(user) = auth {
+                Ok(UserIdentityOptional {
+                    identity: Some(user),
+                })
+            } else {
+                Ok(UserIdentityOptional { identity: None })
+            }
+        })
+    }
+}
+
 #[post("/auth/login")]
 pub async fn login(
     data: Json<RegisterRequest>,
