@@ -44,7 +44,7 @@ pub struct TestaustimeUser {
     pub identity: i32,
 }
 
-use crate::schema::testaustime_users;
+use crate::{requests::HeartBeat, schema::testaustime_users};
 
 #[derive(Insertable, Serialize, Clone)]
 #[diesel(table_name = testaustime_users)]
@@ -214,8 +214,16 @@ pub struct CodingTimeSteps {
     pub past_week: i32,
 }
 
+#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone)]
+pub struct CurrentActivity {
+    pub started: chrono::NaiveDateTime,
+    pub duration: i64,
+    pub heartbeat: HeartBeat,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct FriendWithTime {
+pub struct FriendWithTimeAndStatus {
     pub username: String,
     pub coding_time: CodingTimeSteps,
+    pub status: Option<CurrentActivity>,
 }

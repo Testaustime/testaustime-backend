@@ -402,7 +402,7 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/dat
 | duration | int | Duration of user code session in seconds |
 | project_name | string| Name of the project in which user have a code session |
 | language | string| Code language of the code session |
-| editor_name | string| Name of IDA (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
+| editor_name | string| Name of IDE (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
 | hostname | string| User hostname |
 </details>
 
@@ -592,7 +592,7 @@ Main endpoint of the service. Creates code session and logs current activity in 
 | --- | --- | --- |
 | language | string | Code language of the code session  |
 | hostname | string | User hostname |
-| editor_name | string | Name of IDA (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
+| editor_name | string | Name of IDE (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
 | project_name | string| Name of the project in which user have a code session |
 </details>
 
@@ -783,9 +783,28 @@ curl --request POST 'https://api.testaustime.fi/friends/add' \
 ```
 
 **Sample response**
-```HTTP
-200 OK
+
+```JSON
+{
+    "username": "Username",
+    "coding_time": {
+        "all_time": 0,
+        "past_month": 0,
+        "past_week": 0
+    },
+    "status": {
+        "started": "2023-03-02T12:13:53.121240868",
+        "duration": 5,
+        "heartbeat": {
+            "project_name": "My Project",
+            "language": "javascript",
+            "editor_name": "vscode",
+            "hostname": "mylaptop"
+        }
+    }
+}
 ```
+
 <details>
   <summary>Error examples:</summary>
 
@@ -824,6 +843,16 @@ curl --request GET ''https://api.testaustime.fi/friends/list' \
             "all_time": 0,
             "past_month": 0,
             "past_week": 0
+        },
+        "status": {
+            "started": "2023-03-02T12:13:53.121240868",
+            "duration": 5,
+            "heartbeat": {
+                "project_name": "My Project",
+                "language": "javascript",
+                "editor_name": "vscode",
+                "hostname": "mylaptop"
+            }
         }
     }
 ]
@@ -839,6 +868,14 @@ curl --request GET ''https://api.testaustime.fi/friends/list' \
 | all_time | int | Total duration of user code sessions in seconds |
 | past_month | int| Total duration of user code sessions in seconds for past month |
 | past_week | int| Total duration of user code sessions in seconds for past week |
+| status | Object | Information about the user's current activity |
+| started | string | Timestamp of when the session start |
+| duration | int | Duration of user code session in seconds |
+| heartbeat | Object | Information about the latest heartbeat |
+| project_name | string| Name of the project in which user have a code session |
+| language | string| Code language of the code session |
+| editor_name | string| Name of IDE (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
+| hostname | string| User hostname |
 </details>
 
 #### <a name="regenerate_fc"></a>  [3. POST /friends/regenerate](#friends)
