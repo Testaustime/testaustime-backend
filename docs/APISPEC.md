@@ -14,6 +14,12 @@ Basic path: `https://api.testaustime.fi`
 Limits:
 - Usual Ratelimit: 10 req/m.
 
+You can replace the examples' `Authorization` header with a `Cookie` header, both work. If you send both, the `Authorization` header will be used.
+
+```http
+Cookie: auth_token=Bearer <token>
+```
+
 ## <a name="auth"></a>  Auth
 
 Contains various user authorization operations

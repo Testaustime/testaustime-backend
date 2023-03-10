@@ -57,13 +57,21 @@ where
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let db = req.extract::<Data<Database>>();
-        let auth = req.headers().get("Authorization").cloned();
+        let auth = match (
+            req.headers().get("Authorization").cloned(),
+            req.cookie("auth_token"),
+        ) {
+            (Some(auth), _) => Some(auth.to_str().unwrap().to_string()),
+            (_, Some(cookie)) => Some(cookie.value().to_string()),
+            _ => None,
+        };
+
         let service = Rc::clone(&self.service);
         Box::pin(async move {
             if let Some(auth) = auth {
                 let db = db.await?;
                 let user = block(move || {
-                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
+                    let Some(token) = auth.trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
                     db.get()?.get_user_by_token(token)
                 }).await?.map_err(ErrorUnauthorized)?;
 
