@@ -153,7 +153,7 @@ pub trait DatabaseConnection: Send {
 
     fn get_total_user_count(&mut self) -> Result<u64, TimeError>;
 
-    fn get_total_coding_hours(&mut self) -> Result<u64, TimeError>;
+    fn get_total_coding_time(&mut self) -> Result<u64, TimeError>;
 }
 
 impl DatabaseConnection for DbConnection {
@@ -821,16 +821,14 @@ impl DatabaseConnection for DbConnection {
         Ok(user_identities.count().first::<i64>(self)? as u64)
     }
 
-    fn get_total_coding_hours(&mut self) -> Result<u64, TimeError> {
+    fn get_total_coding_time(&mut self) -> Result<u64, TimeError> {
         use diesel::dsl::sum;
 
         use crate::schema::coding_activities::dsl::*;
 
-        let dur: i64 = coding_activities
+        Ok(coding_activities
             .select(sum(duration))
             .first::<Option<i64>>(self)?
-            .unwrap_or_default();
-
-        Ok((dur / 3600) as u64)
+            .unwrap_or_default() as u64)
     }
 }
