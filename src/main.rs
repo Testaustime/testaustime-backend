@@ -170,7 +170,8 @@ async fn main() -> std::io::Result<()> {
                     .service(api::leaderboards::demote_member)
                     .service(api::leaderboards::kick_member)
                     .service(api::leaderboards::regenerate_invite)
-                    .service(api::search::search_public_users);
+                    .service(api::search::search_public_users)
+                    .service(api::stats::stats);
                 #[cfg(feature = "testausid")]
                 {
                     scope.service(api::oauth::callback)
