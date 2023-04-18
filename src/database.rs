@@ -86,6 +86,8 @@ pub trait DatabaseConnection: Send {
 
     fn get_friends(&mut self, user: i32) -> Result<Vec<UserIdentity>, TimeError>;
 
+    fn get_friends_with_time(&mut self, user: i32) -> Result<Vec<FriendWithTime>, TimeError>;
+
     fn are_friends(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError>;
 
     fn remove_friend(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError>;
@@ -419,6 +421,36 @@ impl DatabaseConnection for DbConnection {
                     .filter(id.eq(cur_friend))
                     .first::<UserIdentity>(self)
                     .ok()
+            })
+            .collect();
+        Ok(friends)
+    }
+
+    fn get_friends_with_time(&mut self, user: i32) -> Result<Vec<FriendWithTime>, TimeError> {
+        use crate::schema::{
+            friend_relations::dsl::{friend_relations, greater_id, lesser_id},
+            user_identities::dsl::*,
+        };
+        let friends = friend_relations
+            .filter(greater_id.eq(user).or(lesser_id.eq(user)))
+            .load::<FriendRelation>(self)?
+            .iter()
+            .map(|fr| {
+                if fr.lesser_id == user {
+                    fr.greater_id
+                } else {
+                    fr.lesser_id
+                }
+            })
+            .filter_map(|cur_friend| {
+                user_identities
+                    .filter(id.eq(cur_friend))
+                    .first::<UserIdentity>(self)
+                    .ok()
+                    .map(|friend| FriendWithTime {
+                        coding_time: self.get_coding_time_steps(friend.id),
+                        user: friend,
+                    })
             })
             .collect();
         Ok(friends)

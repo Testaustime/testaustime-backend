@@ -67,40 +67,26 @@ pub async fn get_friends(
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     let mut conn = db.get()?;
-    match block(move || conn.get_friends(user.id)).await? {
-        Ok(friends) => {
-            let friends_with_time = futures::future::join_all(friends.iter().map(|friend| async {
-                let mut conn2 = db.get().unwrap();
-                let friend_id = friend.id;
-                FriendWithTimeAndStatus {
-                    username: friend.username.clone(),
-                    coding_time: match block(move || conn2.get_coding_time_steps(friend_id)).await {
-                        Ok(coding_time_steps) => coding_time_steps,
-                        _ => CodingTimeSteps {
-                            all_time: 0,
-                            past_month: 0,
-                            past_week: 0,
-                        },
-                    },
-                    status: heartbeats.get(&friend_id).map(|heartbeat| {
-                        let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
-                        drop(heartbeat);
-                        CurrentActivity {
-                            started: start_time,
-                            duration: duration.num_seconds(),
-                            heartbeat: inner_heartbeat,
-                        }
-                    }),
+    let friends = block(move || conn.get_friends_with_time(user.id))
+        .await?
+        .inspect_err(|e| error!("{e}"))?
+        .into_iter()
+        .map(|fwt| FriendWithTimeAndStatus {
+            username: fwt.user.username,
+            coding_time: fwt.coding_time,
+            status: heartbeats.get(&fwt.user.id).map(|heartbeat| {
+                let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+                drop(heartbeat);
+                CurrentActivity {
+                    started: start_time,
+                    duration: duration.num_seconds(),
+                    heartbeat: inner_heartbeat,
                 }
-            }))
-            .await;
-            Ok(web::Json(friends_with_time))
-        }
-        Err(e) => {
-            error!("{}", e);
-            Err(e)
-        }
-    }
+            }),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(web::Json(friends))
 }
 
 #[post("/friends/regenerate")]

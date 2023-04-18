@@ -1,4 +1,4 @@
-#![feature(lazy_cell)]
+#![feature(lazy_cell, result_option_inspect)]
 
 mod api;
 mod auth;
