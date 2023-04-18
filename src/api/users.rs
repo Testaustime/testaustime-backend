@@ -93,7 +93,7 @@ pub async fn get_current_activity(
         if target_user.is_public {
             target_user.id
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         }
     };
 
@@ -129,7 +129,7 @@ pub async fn get_activities(
         if target_user.is_public {
             return Ok(web::Json(block(move || db.get()?.get_activity(data.into_inner(), target_user.id)).await??))
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         };
     };
 
@@ -187,7 +187,7 @@ pub async fn get_activity_summary(
         if target_user.is_public {
             block(move || conn.get_all_activity(target_user.id)).await??
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         }
     };
 
