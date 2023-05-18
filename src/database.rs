@@ -793,9 +793,11 @@ impl DatabaseConnection for DbConnection {
 
     fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError> {
         use crate::schema::user_identities::dsl::*;
+        sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+
         Ok(user_identities
             .filter(is_public.eq(true))
-            .filter(username.like(format!("%{search}%")))
+            .filter(lower(username).like(format!("%{}%", search.to_lowercase())))
             .load::<UserIdentity>(self)?
             .into_iter()
             .map(|u| u.into())
