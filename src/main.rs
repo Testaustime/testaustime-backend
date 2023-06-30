@@ -101,7 +101,7 @@ async fn main() -> std::io::Result<()> {
         storage: DashMap::new(),
     });
 
-    let ratelimiter = RateLimiterStorage::new(20, 60).start();
+    let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min, 60).start();
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
