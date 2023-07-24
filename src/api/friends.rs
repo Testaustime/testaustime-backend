@@ -1,26 +1,28 @@
 use actix_web::{
     error::*,
-    web::{self, block, Data},
+    web::{self, Data},
     HttpResponse, Responder,
 };
 use diesel::result::DatabaseErrorKind;
 
 use crate::{
     api::activity::HeartBeatMemoryStore,
-    database::Database,
+    database::DatabaseWrapper,
     error::TimeError,
-    models::{CodingTimeSteps, CurrentActivity, FriendWithTimeAndStatus, UserId},
+    models::{CurrentActivity, FriendWithTimeAndStatus, UserId},
 };
 
 #[post("/friends/add")]
 pub async fn add_friend(
     user: UserId,
     body: String,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
-    match block(move || conn.add_friend(user.id, body.trim().trim_start_matches("ttfc_"))).await? {
+    match db
+        .add_friend(user.id, body.trim().trim_start_matches("ttfc_").to_string())
+        .await
+    {
         // This is not correct
         Err(e) => {
             error!("{}", e);
@@ -33,17 +35,9 @@ pub async fn add_friend(
             })
         }
         Ok(friend) => {
-            let mut conn = db.get()?;
             let friend_with_time = FriendWithTimeAndStatus {
                 username: friend.username.clone(),
-                coding_time: match block(move || conn.get_coding_time_steps(friend.id)).await {
-                    Ok(coding_time_steps) => coding_time_steps,
-                    _ => CodingTimeSteps {
-                        all_time: 0,
-                        past_month: 0,
-                        past_week: 0,
-                    },
-                },
+                coding_time: db.get_coding_time_steps(friend.id).await,
                 status: heartbeats.get(&friend.id).map(|heartbeat| {
                     let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                     drop(heartbeat);
@@ -63,12 +57,11 @@ pub async fn add_friend(
 #[get("/friends/list")]
 pub async fn get_friends(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
-    let friends = block(move || conn.get_friends_with_time(user.id))
-        .await?
+    let friends = db.get_friends_with_time(user.id)
+        .await
         .inspect_err(|e| error!("{e}"))?
         .into_iter()
         .map(|fwt| FriendWithTimeAndStatus {
@@ -92,26 +85,23 @@ pub async fn get_friends(
 #[post("/friends/regenerate")]
 pub async fn regenerate_friend_code(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    match block(move || db.get()?.regenerate_friend_code(user.id)).await? {
-        Ok(code) => Ok(web::Json(json!({ "friend_code": code }))),
-        Err(e) => {
-            error!("{}", e);
-            Err(e)
-        }
-    }
+    db.regenerate_friend_code(user.id)
+        .await
+        .inspect_err(|e| error!("{}", e))
+        .map(|code| web::Json(json!({ "friend_code": code })))
 }
 
 #[delete("/friends/remove")]
 pub async fn remove(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     body: String,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
-    let friend = block(move || conn.get_user_by_name(&body)).await??;
-    let deleted = block(move || db.get()?.remove_friend(user.id, friend.id)).await??;
+    let friend = db.get_user_by_name(body.clone()).await?;
+    let deleted = db.remove_friend(user.id, friend.id).await?;
+
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {

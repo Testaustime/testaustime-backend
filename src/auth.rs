@@ -2,13 +2,12 @@ use std::rc::Rc;
 
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::ErrorUnauthorized,
-    web::{block, Data},
-    Error, HttpMessage,
+    error::{ErrorInternalServerError, ErrorUnauthorized},
+    Error, FromRequest, HttpMessage,
 };
 use futures::future::LocalBoxFuture;
 
-use crate::{database::Database, error::TimeError, models::UserIdentity};
+use crate::{database::DatabaseWrapper, error::TimeError, models::UserIdentity};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {
@@ -55,17 +54,19 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        let db = req.extract::<Data<Database>>();
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let db = DatabaseWrapper::extract(&req.request());
         let auth = req.headers().get("Authorization").cloned();
         let service = Rc::clone(&self.service);
         Box::pin(async move {
             if let Some(auth) = auth {
-                let db = db.await?;
-                let user = block(move || {
-                    let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(TimeError::Unauthorized) };
-                    db.get()?.get_user_by_token(token)
-                }).await?.map_err(ErrorUnauthorized)?;
+                let db = db.await.map_err(ErrorInternalServerError)?;
+
+                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else { return Err(ErrorUnauthorized(TimeError::Unauthorized)) };
+                let user = db
+                    .get_user_by_token(token.to_string())
+                    .await
+                    .map_err(ErrorUnauthorized)?;
 
                 req.extensions_mut().insert(Authentication::AuthToken(user));
             } else {

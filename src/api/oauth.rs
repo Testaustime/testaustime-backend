@@ -3,13 +3,13 @@ use std::{collections::HashMap, sync::LazyLock};
 use actix_web::{
     cookie::Cookie,
     error::*,
-    web::{block, Data, Query},
+    web::{Data, Query},
     HttpResponse, Responder,
 };
 use awc::Client;
 use serde_derive::Deserialize;
 
-use crate::{database::Database, error::TimeError};
+use crate::{database::DatabaseWrapper, error::TimeError};
 
 #[derive(Deserialize)]
 struct TokenExchangeRequest {
@@ -51,7 +51,7 @@ static CLIENT_INFO: LazyLock<ClientInfo> = LazyLock::new(|| {
 async fn callback(
     request: Query<TokenExchangeRequest>,
     client: Data<Client>,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
     if request.code.chars().any(|c| !c.is_alphanumeric()) {
         return Err(TimeError::BadCode);
@@ -82,8 +82,9 @@ async fn callback(
         .await
         .unwrap();
 
-    let token =
-        block(move || db.get()?.testausid_login(res.id, res.name, res.platform.id)).await??;
+    let token = db
+        .testausid_login(res.id, res.name, res.platform.id)
+        .await?;
 
     Ok(HttpResponse::PermanentRedirect()
         .insert_header(("location", "https://testaustime.fi/oauth_redirect"))

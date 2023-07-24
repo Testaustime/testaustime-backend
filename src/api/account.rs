@@ -1,10 +1,7 @@
-use actix_web::{
-    web::{self, block, Data},
-    HttpResponse, Responder,
-};
+use actix_web::{web, HttpResponse, Responder};
 use serde_derive::Deserialize;
 
-use crate::{database::Database, error::TimeError, models::UserId};
+use crate::{database::DatabaseWrapper, error::TimeError, models::UserId};
 
 #[derive(Deserialize)]
 pub struct Settings {
@@ -15,10 +12,11 @@ pub struct Settings {
 pub async fn change_settings(
     settings: web::Json<Settings>,
     userid: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
     if let Some(public_profile) = settings.public_profile {
-        block(move || db.get()?.change_visibility(userid.id, public_profile)).await??;
+        db.change_visibility(userid.id, public_profile).await?;
     };
+
     Ok(HttpResponse::Ok())
 }

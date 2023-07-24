@@ -2,6 +2,7 @@
 
 mod api;
 mod auth;
+mod cache;
 mod database;
 mod error;
 mod models;
@@ -23,7 +24,7 @@ use auth::{AuthMiddleware, Authentication};
 use awc::Client;
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
-use database::{Database, DatabaseConnectionPool};
+use database::Database;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
@@ -70,8 +71,6 @@ impl RootSpanBuilder for TestaustimeRootSpanBuilder {
     fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
 }
 
-type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
-
 pub struct RegisterLimiter {
     pub limit_by_peer_ip: bool,
     pub storage: DashMap<String, NaiveDateTime>,
@@ -92,9 +91,7 @@ async fn main() -> std::io::Result<()> {
         .build(manager)
         .expect("Failed to create connection pool");
 
-    let database = Data::new(Database {
-        backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
-    });
+    let database = Data::new(Database::new(pool));
 
     let register_limiter = Data::new(RegisterLimiter {
         limit_by_peer_ip: config.ratelimit_by_peer_ip,

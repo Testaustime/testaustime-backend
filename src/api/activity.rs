@@ -1,13 +1,13 @@
 use actix_web::{
     error::*,
-    web::{self, block, Data, Json},
+    web::{self, Data, Json},
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 use serde_derive::Deserialize;
 
-use crate::{database::Database, error::TimeError, models::UserId, requests::*};
+use crate::{database::DatabaseWrapper, error::TimeError, models::UserId, requests::*};
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
@@ -21,7 +21,7 @@ pub struct RenameRequest {
 pub async fn update(
     user: UserId,
     heartbeat: Json<HeartBeat>,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(project) = &heartbeat.project_name {
@@ -61,8 +61,8 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    db.get()?
-                        .add_activity(user.id, current_heartbeat, start, duration)
+                    db.add_activity(user.id, current_heartbeat, start, duration)
+                        .await
                         .map_err(ErrorInternalServerError)?;
 
                     heartbeats.insert(
@@ -92,8 +92,8 @@ pub async fn update(
                     duration = curtime.signed_duration_since(start);
                 }
 
-                db.get()?
-                    .add_activity(user.id, current_heartbeat, start, duration)
+                db.add_activity(user.id, current_heartbeat, start, duration)
+                    .await
                     .map_err(ErrorInternalServerError)?;
 
                 heartbeats.insert(
@@ -125,18 +125,15 @@ pub async fn update(
 #[post("/flush")]
 pub async fn flush(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
     if let Some(heartbeat) = heartbeats.get(&user.id) {
         let (inner_heartbeat, start, duration) = heartbeat.to_owned();
         drop(heartbeat);
         heartbeats.remove(&user.id);
-        block(move || {
-            db.get()?
-                .add_activity(user.id, inner_heartbeat, start, duration)
-        })
-        .await??;
+        db.add_activity(user.id, inner_heartbeat, start, duration)
+            .await?;
     }
     Ok(HttpResponse::Ok().finish())
 }
@@ -144,14 +141,12 @@ pub async fn flush(
 #[delete("/delete")]
 pub async fn delete(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     body: String,
 ) -> Result<impl Responder, TimeError> {
-    let deleted = block(move || {
-        db.get()?
-            .delete_activity(user.id, body.parse::<i32>().map_err(ErrorBadRequest)?)
-    })
-    .await??;
+    let deleted = db
+        .delete_activity(user.id, body.parse::<i32>().map_err(ErrorBadRequest)?)
+        .await?;
     if deleted {
         Ok(HttpResponse::Ok().finish())
     } else {
@@ -162,10 +157,12 @@ pub async fn delete(
 #[post("/rename")]
 pub async fn rename_project(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     body: Json<RenameRequest>,
 ) -> Result<impl Responder, TimeError> {
-    let renamed = block(move || db.get()?.rename_project(user.id, &body.from, &body.to)).await??;
+    let renamed = db
+        .rename_project(user.id, body.from.clone(), body.to.clone())
+        .await?;
 
     Ok(web::Json(json!({ "affected_activities": renamed })))
 }
