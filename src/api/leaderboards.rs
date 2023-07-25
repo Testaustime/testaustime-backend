@@ -8,6 +8,7 @@ use diesel::result::DatabaseErrorKind;
 use serde::Deserialize;
 
 use crate::{
+    api::auth::SecuredUserIdentity,
     database::DatabaseWrapper,
     error::TimeError,
     models::{PrivateLeaderboard, UserId},
@@ -106,13 +107,13 @@ pub async fn get_leaderboard(
 
 #[delete("/leaderboards/{name}")]
 pub async fn delete_leaderboard(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
     let name = path.0.clone();
     if let Ok(lid) = db.get_leaderboard_id_by_name(name).await {
-        if db.is_leaderboard_admin(user.id, lid).await? {
+        if db.is_leaderboard_admin(user.identity.id, lid).await? {
             db.delete_leaderboard(path.0.clone()).await?;
             Ok(HttpResponse::Ok().finish())
         } else {
@@ -157,17 +158,19 @@ pub async fn join_leaderboard(
 
 #[post("/leaderboards/{name}/leave")]
 pub async fn leave_leaderboard(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
     if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.id, lid).await?
+        if db.is_leaderboard_admin(user.identity.id, lid).await?
             && db.get_leaderboard_admin_count(lid).await? == 1
         {
             return Err(TimeError::LastAdmin);
         }
-        let left = db.remove_user_from_leaderboard(lid, user.id).await?;
+        let left = db
+            .remove_user_from_leaderboard(lid, user.identity.id)
+            .await?;
 
         if left {
             Ok(HttpResponse::Ok().finish())
@@ -182,13 +185,13 @@ pub async fn leave_leaderboard(
 
 #[post("/leaderboards/{name}/promote")]
 pub async fn promote_member(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
     promotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.id, lid).await? {
+        if db.is_leaderboard_admin(user.identity.id, lid).await? {
             if let Ok(newadmin) = db.get_user_by_name(promotion.user.clone()).await {
                 if db
                     .promote_user_to_leaderboard_admin(lid, newadmin.id)
@@ -215,13 +218,13 @@ pub async fn promote_member(
 
 #[post("/leaderboards/{name}/demote")]
 pub async fn demote_member(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
     demotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.id, lid).await? {
+        if db.is_leaderboard_admin(user.identity.id, lid).await? {
             if let Ok(oldadmin) = db.get_user_by_name(demotion.user.clone()).await {
                 if db
                     .demote_user_to_leaderboard_member(lid, oldadmin.id)
@@ -248,13 +251,13 @@ pub async fn demote_member(
 
 #[post("/leaderboards/{name}/kick")]
 pub async fn kick_member(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
     kick: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
     if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.id, lid).await? {
+        if db.is_leaderboard_admin(user.identity.id, lid).await? {
             if let Ok(kmember) = db.get_user_by_name(kick.user.clone()).await {
                 if db.remove_user_from_leaderboard(lid, kmember.id).await? {
                     Ok(HttpResponse::Ok().finish())
@@ -277,12 +280,12 @@ pub async fn kick_member(
 
 #[post("/leaderboards/{name}/regenerate")]
 pub async fn regenerate_invite(
-    user: UserId,
+    user: SecuredUserIdentity,
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
     if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.id, lid).await? {
+        if db.is_leaderboard_admin(user.identity.id, lid).await? {
             let code = db.regenerate_leaderboard_invite(lid).await?;
             Ok(web::Json(json!({ "invite_code": code })))
         } else {

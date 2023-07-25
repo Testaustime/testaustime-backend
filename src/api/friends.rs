@@ -6,7 +6,7 @@ use actix_web::{
 use diesel::result::DatabaseErrorKind;
 
 use crate::{
-    api::activity::HeartBeatMemoryStore,
+    api::{activity::HeartBeatMemoryStore, auth::SecuredUserIdentity},
     database::DatabaseWrapper,
     error::TimeError,
     models::{CurrentActivity, FriendWithTimeAndStatus, UserId},
@@ -60,7 +60,8 @@ pub async fn get_friends(
     db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    let friends = db.get_friends_with_time(user.id)
+    let friends = db
+        .get_friends_with_time(user.id)
         .await
         .inspect_err(|e| error!("{e}"))?
         .into_iter()
@@ -84,10 +85,10 @@ pub async fn get_friends(
 
 #[post("/friends/regenerate")]
 pub async fn regenerate_friend_code(
-    user: UserId,
+    user: SecuredUserIdentity,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    db.regenerate_friend_code(user.id)
+    db.regenerate_friend_code(user.identity.id)
         .await
         .inspect_err(|e| error!("{}", e))
         .map(|code| web::Json(json!({ "friend_code": code })))
@@ -95,12 +96,12 @@ pub async fn regenerate_friend_code(
 
 #[delete("/friends/remove")]
 pub async fn remove(
-    user: UserId,
+    user: SecuredUserIdentity,
     db: DatabaseWrapper,
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let friend = db.get_user_by_name(body.clone()).await?;
-    let deleted = db.remove_friend(user.id, friend.id).await?;
+    let deleted = db.remove_friend(user.identity.id, friend.id).await?;
 
     if deleted {
         Ok(HttpResponse::Ok().finish())

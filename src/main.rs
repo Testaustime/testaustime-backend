@@ -1,4 +1,4 @@
-#![feature(lazy_cell, result_option_inspect)]
+#![feature(lazy_cell, result_option_inspect, addr_parse_ascii)]
 
 mod api;
 mod auth;
@@ -19,7 +19,7 @@ use actix_web::{
     web::{Data, QueryConfig},
     App, HttpMessage, HttpServer,
 };
-use auth::{AuthMiddleware, Authentication};
+use auth::{secured_access::SecuredAccessTokenStorage, AuthMiddleware, Authentication};
 #[cfg(feature = "testausid")]
 use awc::Client;
 use chrono::NaiveDateTime;
@@ -103,6 +103,8 @@ async fn main() -> std::io::Result<()> {
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
 
+    let secured_access_token_storage = Data::new(SecuredAccessTokenStorage::new());
+
     HttpServer::new(move || {
         #[cfg(feature = "testausid")]
         let tracing = TracingLogger::<TestaustimeRootSpanBuilder>::new();
@@ -123,6 +125,7 @@ async fn main() -> std::io::Result<()> {
         let app = App::new()
             .app_data(Data::clone(&register_limiter))
             .app_data(query_config)
+            .app_data(Data::clone(&secured_access_token_storage))
             .wrap(cors)
             .service(api::health)
             .service(api::auth::register)
@@ -147,6 +150,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
                     .service(api::auth::changepassword)
+                    .service(api::auth::get_secured_access_token)
                     .service(api::account::change_settings)
                     .service(api::friends::add_friend)
                     .service(api::friends::get_friends)

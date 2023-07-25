@@ -8,10 +8,10 @@ use actix_web::{
 };
 
 use crate::{
-    auth::Authentication,
+    auth::{secured_access::SecuredAccessTokenStorage, Authentication},
     database::DatabaseWrapper,
     error::TimeError,
-    models::{SelfUser, UserId, UserIdentity},
+    models::{SecuredAccessTokenResponse, SelfUser, UserId, UserIdentity},
     requests::*,
     RegisterLimiter,
 };
@@ -41,6 +41,26 @@ impl FromRequest for UserIdentity {
         Box::pin(async move {
             if let Authentication::AuthToken(user) = auth {
                 Ok(user)
+            } else {
+                Err(TimeError::Unauthorized)
+            }
+        })
+    }
+}
+
+pub struct SecuredUserIdentity {
+    pub identity: UserIdentity,
+}
+
+impl FromRequest for SecuredUserIdentity {
+    type Error = TimeError;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let auth = req.extensions().get::<Authentication>().cloned().unwrap();
+        Box::pin(async move {
+            if let Authentication::SecuredAuthToken(user) = auth {
+                Ok(SecuredUserIdentity { identity: user })
             } else {
                 Err(TimeError::Unauthorized)
             }
@@ -89,9 +109,35 @@ pub async fn login(
     }
 }
 
+#[post("/auth/securedaccess")]
+pub async fn get_secured_access_token(
+    data: Json<RegisterRequest>,
+    secured_access_storage: Data<SecuredAccessTokenStorage>,
+    db: DatabaseWrapper,
+) -> Result<impl Responder, TimeError> {
+    if data.password.len() > 128 {
+        return Err(TimeError::InvalidLength(
+            "Password cannot be longer than 128 characters".to_string(),
+        ));
+    }
+
+    match db
+        .verify_user_password(&data.username, &data.password)
+        .await
+    {
+        Ok(Some(user)) => Ok(Json(SecuredAccessTokenResponse {
+            token: secured_access_storage.create_token(user.id),
+        })),
+        _ => Err(TimeError::InvalidCredentials),
+    }
+}
+
 #[post("/auth/regenerate")]
-pub async fn regenerate(user: UserId, db: DatabaseWrapper) -> Result<impl Responder, TimeError> {
-    db.regenerate_token(user.id)
+pub async fn regenerate(
+    user: SecuredUserIdentity,
+    db: DatabaseWrapper,
+) -> Result<impl Responder, TimeError> {
+    db.regenerate_token(user.identity.id)
         .await
         .inspect_err(|e| error!("{}", e))
         .map(|token| {
@@ -151,7 +197,7 @@ pub async fn register(
 
 #[post("/auth/changeusername")]
 pub async fn changeusername(
-    userid: UserId,
+    user: SecuredUserIdentity,
     data: Json<UsernameChangeRequest>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
@@ -169,7 +215,7 @@ pub async fn changeusername(
         return Err(TimeError::UserExists);
     }
 
-    let user = db.get_user_by_id(userid.id).await?;
+    let user = db.get_user_by_id(user.identity.id).await?;
     db.change_username(user.id, data.new.clone()).await?;
     Ok(HttpResponse::Ok().finish())
 }

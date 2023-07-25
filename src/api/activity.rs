@@ -7,7 +7,10 @@ use chrono::{Duration, Local};
 use dashmap::DashMap;
 use serde_derive::Deserialize;
 
-use crate::{database::DatabaseWrapper, error::TimeError, models::UserId, requests::*};
+use crate::{
+    api::auth::SecuredUserIdentity, database::DatabaseWrapper, error::TimeError, models::UserId,
+    requests::*,
+};
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
@@ -140,12 +143,15 @@ pub async fn flush(
 
 #[delete("/delete")]
 pub async fn delete(
-    user: UserId,
+    user: SecuredUserIdentity,
     db: DatabaseWrapper,
     body: String,
 ) -> Result<impl Responder, TimeError> {
     let deleted = db
-        .delete_activity(user.id, body.parse::<i32>().map_err(ErrorBadRequest)?)
+        .delete_activity(
+            user.identity.id,
+            body.parse::<i32>().map_err(ErrorBadRequest)?,
+        )
         .await?;
     if deleted {
         Ok(HttpResponse::Ok().finish())

@@ -233,3 +233,8 @@ pub struct FriendWithTimeAndStatus {
     pub coding_time: CodingTimeSteps,
     pub status: Option<CurrentActivity>,
 }
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
+pub struct SecuredAccessTokenResponse {
+    pub token: String,
+}

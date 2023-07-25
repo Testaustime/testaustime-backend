@@ -15,7 +15,10 @@ use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, Pool},
 };
-use futures_util::future::join_all;
+use futures_util::{
+    future::OptionFuture,
+    stream::{self, StreamExt},
+};
 
 use crate::{
     error::TimeError,
@@ -387,6 +390,7 @@ impl DatabaseWrapper {
         Ok(friend)
     }
 
+    #[allow(dead_code)]
     pub async fn get_friends(&self, user: i32) -> Result<Vec<UserIdentity>, TimeError> {
         use crate::schema::{
             friend_relations::dsl::{friend_relations, greater_id, lesser_id},
@@ -425,43 +429,53 @@ impl DatabaseWrapper {
         Ok(friends)
     }
 
-    pub async fn get_friends_with_time(&mut self, user: i32) -> Result<Vec<FriendWithTime>, TimeError> {
+    pub async fn get_friends_with_time(&self, user: i32) -> Result<Vec<FriendWithTime>, TimeError> {
         use crate::schema::{
             friend_relations::dsl::{friend_relations, greater_id, lesser_id},
             user_identities::dsl::*,
         };
 
-        let friends = join_all(self.run_async_query(move |conn| {
-            Ok(friend_relations
-                .filter(greater_id.eq(user).or(lesser_id.eq(user)))
-                .load::<FriendRelation>(&mut conn)?
-                .iter()
-                .map(|fr| {
-                    if fr.lesser_id == user {
-                        fr.greater_id
-                    } else {
-                        fr.lesser_id
+        let friends = stream::iter(
+            self.run_async_query(move |mut conn| {
+                Ok(friend_relations
+                    .filter(greater_id.eq(user).or(lesser_id.eq(user)))
+                    .load::<FriendRelation>(&mut conn)?
+                    .iter()
+                    .map(|fr| {
+                        if fr.lesser_id == user {
+                            fr.greater_id
+                        } else {
+                            fr.lesser_id
+                        }
+                    })
+                    .collect::<Vec<_>>())
+            })
+            .await?,
+        )
+        .then(|cur_friend| async move {
+            let opt_friends = self
+                .run_async_query(move |mut conn| {
+                    Ok(user_identities
+                        .filter(id.eq(cur_friend))
+                        .first::<UserIdentity>(&mut conn)
+                        .ok())
+                })
+                .await
+                .unwrap();
+
+            let future: OptionFuture<_> = opt_friends
+                .map(|friend| async {
+                    FriendWithTime {
+                        coding_time: self.get_coding_time_steps(friend.id).await,
+                        user: friend,
                     }
                 })
-            )})
-            .await
-            .map(|cur_friend| async {
-                join_all(self.run_async_query(move |conn| {
-                    Ok(user_identities
-                       .filter(id.eq(cur_friend))
-                       .first::<UserIdentity>(&mut conn)
-                       .ok())
-                })
-                    .await
-                    .map(|friends| {
-                        friends.map(|friend| async { FriendWithTime {
-                            coding_time: self.get_coding_time_steps(friend.id).await,
-                            user: friend,
-                        }})
-                    }))
-            }))
-        .await?
-        .collect()
+                .into();
+
+            future.await.unwrap()
+        })
+        .collect::<Vec<FriendWithTime>>()
+        .await;
 
         Ok(friends)
     }
