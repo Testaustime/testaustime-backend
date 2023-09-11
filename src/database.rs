@@ -347,8 +347,7 @@ impl DatabaseWrapper {
             query = query.filter(duration.ge(min_duration));
         };
 
-        self
-            .run_async_query(move |mut conn| Ok(query.load::<CodingActivity>(&mut conn)?))
+        self.run_async_query(move |mut conn| Ok(query.load::<CodingActivity>(&mut conn)?))
             .await
     }
 
