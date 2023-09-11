@@ -355,15 +355,18 @@ impl DatabaseWrapper {
     }
 
     pub async fn add_friend(&self, user: i32, friend: String) -> Result<UserIdentity, TimeError> {
-        let Some(friend) = self.run_async_query(move |mut conn| {
-            use crate::schema::user_identities::dsl::*;
+        let Some(friend) = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::user_identities::dsl::*;
 
-            Ok(user_identities
-                .filter(friend_code.eq(friend))
-                .first::<UserIdentity>(&mut conn)
-                .optional()?)
-        }).await? else {
-            return Err(TimeError::UserNotFound)
+                Ok(user_identities
+                    .filter(friend_code.eq(friend))
+                    .first::<UserIdentity>(&mut conn)
+                    .optional()?)
+            })
+            .await?
+        else {
+            return Err(TimeError::UserNotFound);
         };
 
         if friend.id == user {

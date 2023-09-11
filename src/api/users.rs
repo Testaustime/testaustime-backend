@@ -122,7 +122,9 @@ pub async fn get_activities(
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(db.get_activity(data.into_inner(), target_user.id).await?))
+            return Ok(web::Json(
+                db.get_activity(data.into_inner(), target_user.id).await?,
+            ));
         } else {
             return Err(TimeError::UserNotFound);
         };

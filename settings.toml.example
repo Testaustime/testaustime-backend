@@ -5,3 +5,4 @@ ratelimit_by_peer_ip=true
 max_requests_per_min=30
 max_heartbeats_per_min=8
 max_registers_per_day=3
+bypass_token="5woKC8Z3pqLqhDTX/zY1j1JxMozglIukNsr3YMMLBOk="

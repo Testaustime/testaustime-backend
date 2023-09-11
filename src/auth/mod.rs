@@ -71,7 +71,7 @@ where
         Box::pin(async move {
             if let Some(auth) = auth {
                 let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else {
-                    return Err(ErrorUnauthorized(TimeError::Unauthorized))
+                    return Err(ErrorUnauthorized(TimeError::Unauthorized));
                 };
 
                 let db = db.await.map_err(ErrorInternalServerError)?;

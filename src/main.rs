@@ -2,14 +2,13 @@
 
 mod api;
 mod auth;
-mod cache;
 mod database;
 mod error;
 mod models;
+mod ratelimiter;
 mod requests;
 mod schema;
 mod utils;
-mod ratelimiter;
 
 use actix::Actor;
 use actix_cors::Cors;
@@ -30,8 +29,8 @@ use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
-use serde_derive::Deserialize;
 use ratelimiter::{RateLimiter, RateLimiterStorage};
+use serde_derive::Deserialize;
 use tracing::Span;
 use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
 
@@ -49,6 +48,7 @@ extern crate serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
+    pub bypass_token: String,
     pub ratelimit_by_peer_ip: bool,
     pub max_requests_per_min: usize,
     pub address: String,
@@ -138,6 +138,7 @@ async fn main() -> std::io::Result<()> {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip,
                         maxrpm: config.max_requests_per_min,
+                        bypass_token: config.bypass_token.clone(),
                         reset_interval: 60,
                     })
                     .service({
