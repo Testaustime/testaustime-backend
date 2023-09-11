@@ -347,11 +347,9 @@ impl DatabaseWrapper {
             query = query.filter(duration.ge(min_duration));
         };
 
-        let res = self
+        self
             .run_async_query(move |mut conn| Ok(query.load::<CodingActivity>(&mut conn)?))
-            .await;
-
-        res
+            .await
     }
 
     pub async fn add_friend(&self, user: i32, friend: String) -> Result<UserIdentity, TimeError> {
@@ -965,11 +963,11 @@ impl DatabaseWrapper {
             };
             let new_user_id = self
                 .run_async_query(move |mut conn| {
-                    Ok(diesel::insert_into(crate::schema::user_identities::table)
+                    diesel::insert_into(crate::schema::user_identities::table)
                         .values(&new_user)
                         .returning(id)
                         .get_results::<i32>(&mut conn)
-                        .map_err(|_| TimeError::UserExists)?)
+                        .map_err(|_| TimeError::UserExists)
                 })
                 .await?;
 

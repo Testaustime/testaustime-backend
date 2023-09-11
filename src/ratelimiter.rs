@@ -96,7 +96,7 @@ impl Handler<IpRequest> for RateLimiterStorage {
                     Some(self.maxrpm - rlinfo.request_count),
                     Duration::from_secs(self.reset_interval as u64),
                 ))
-            } else if rlinfo.request_count as usize >= self.maxrpm {
+            } else if rlinfo.request_count >= self.maxrpm {
                 Ok((None, duration))
             } else {
                 rlinfo.request_count += 1;
@@ -199,7 +199,7 @@ where
             Box::pin(async move {
                 let (remaining, reset) = res
                     .await
-                    .map_err(|e| actix_web::error::ErrorInternalServerError(e))??;
+                    .map_err(actix_web::error::ErrorInternalServerError)??;
                 if let Some(remaining) = remaining {
                     let mut resp = service.call(req).await?;
                     let headers = resp.headers_mut();

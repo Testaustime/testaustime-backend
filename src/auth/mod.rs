@@ -60,7 +60,7 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let db = DatabaseWrapper::extract(&req.request());
+        let db = DatabaseWrapper::extract(req.request());
         let secured_access_storage = req
             .app_data::<Data<SecuredAccessTokenStorage>>()
             .expect("Secured token access storage not initialized")
