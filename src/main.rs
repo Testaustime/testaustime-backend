@@ -9,6 +9,7 @@ mod models;
 mod requests;
 mod schema;
 mod utils;
+mod ratelimiter;
 
 use actix::Actor;
 use actix_cors::Cors;
@@ -30,7 +31,7 @@ use diesel::{
     PgConnection,
 };
 use serde_derive::Deserialize;
-use testausratelimiter::{RateLimiter, RateLimiterStorage};
+use ratelimiter::{RateLimiter, RateLimiterStorage};
 use tracing::Span;
 use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
 
