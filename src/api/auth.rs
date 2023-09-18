@@ -62,7 +62,7 @@ impl FromRequest for SecuredUserIdentity {
             if let Authentication::SecuredAuthToken(user) = auth {
                 Ok(SecuredUserIdentity { identity: user })
             } else {
-                Err(TimeError::Unauthorized)
+                Err(TimeError::UnauthroizedSecuredAccess)
             }
         })
     }

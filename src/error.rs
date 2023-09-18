@@ -27,6 +27,8 @@ pub enum TimeError {
     LeaderboardNotFound,
     #[error("You are not authorized")]
     Unauthorized,
+    #[error("Missing secured access token")]
+    UnauthroizedSecuredAccess,
     #[error("Invalid username or password")]
     InvalidCredentials,
     #[error(transparent)]
@@ -77,7 +79,9 @@ impl ResponseError for TimeError {
             | TimeError::LeaderboardExists
             | TimeError::AlreadyMember
             | TimeError::UserExists => StatusCode::CONFLICT,
-            TimeError::Unauthorized | TimeError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            TimeError::Unauthorized
+            | TimeError::InvalidCredentials
+            | TimeError::UnauthroizedSecuredAccess => StatusCode::UNAUTHORIZED,
             TimeError::TooManyRegisters => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
