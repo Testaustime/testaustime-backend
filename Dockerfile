@@ -32,8 +32,6 @@ WORKDIR /testaustime-rs
 
 COPY Cargo.toml Cargo.lock ./
 
-COPY testausratelimiter/ testausratelimiter/
-
 RUN cargo build --target $(cat /target.txt) --release && rm -rf .git src/ target/$(cat /target.txt)/release/deps/testaustime*
 
 COPY src/ src/
