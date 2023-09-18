@@ -44,5 +44,4 @@ rand = "0.8"
 dotenv = "0.15"
 url = "2.2"
 
-testausratelimiter = { path = "testausratelimiter" }
 itertools = "0.10.3"

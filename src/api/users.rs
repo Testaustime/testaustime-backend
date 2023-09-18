@@ -1,6 +1,6 @@
 use actix_web::{
     error::*,
-    web::{self, block, Data, Path, Query},
+    web::{self, Data, Path, Query},
     HttpResponse, Responder,
 };
 use chrono::{Duration, Local};
@@ -8,7 +8,7 @@ use serde_derive::Deserialize;
 
 use crate::{
     api::{activity::HeartBeatMemoryStore, auth::UserIdentityOptional},
-    database::Database,
+    database::DatabaseWrapper,
     error::TimeError,
     models::{CurrentActivity, UserId, UserIdentity},
     requests::DataRequest,
@@ -35,27 +35,23 @@ pub struct ListLeaderboard {
 #[get("/users/@me/leaderboards")]
 pub async fn my_leaderboards(
     user: UserId,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    Ok(web::Json(
-        block(move || db.get()?.get_user_leaderboards(user.id)).await??,
-    ))
+    Ok(web::Json(db.get_user_leaderboards(user.id).await?))
 }
 
 #[delete("/users/@me/delete")]
 pub async fn delete_user(
-    pool: Data<Database>,
+    db: DatabaseWrapper,
     user: web::Json<UserAuthentication>,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = pool.get()?;
-    if let Some(user) = block(move || {
-        pool.get()?
-            .verify_user_password(&user.username, &user.password)
-    })
-    .await??
+    if let Some(user) = db
+        .verify_user_password(&user.username, &user.password)
+        .await?
     {
-        block(move || conn.delete_user(user.id)).await??;
+        db.delete_user(user.id).await?;
     }
+
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -63,22 +59,21 @@ pub async fn delete_user(
 pub async fn get_current_activity(
     path: Path<(String,)>,
     opt_user: UserIdentityOptional,
-    db: Data<Database>,
+    db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
-
     let target_user = if let Some(user) = opt_user.identity {
         if path.0 == "@me" {
             user.id
         } else {
-            let target_user = conn
-                .get_user_by_name(&path.0)
+            let target_user = db
+                .get_user_by_name(path.0.clone())
+                .await
                 .map_err(|_| TimeError::UserNotFound)?;
 
             if target_user.id == user.id
                 || target_user.is_public
-                || block(move || conn.are_friends(user.id, target_user.id)).await??
+                || db.are_friends(user.id, target_user.id).await?
             {
                 target_user.id
             } else {
@@ -86,14 +81,15 @@ pub async fn get_current_activity(
             }
         }
     } else {
-        let target_user = conn
-            .get_user_by_name(&path.0)
+        let target_user = db
+            .get_user_by_name(path.0.clone())
+            .await
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
             target_user.id
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         }
     };
 
@@ -117,36 +113,38 @@ pub async fn get_activities(
     data: Query<DataRequest>,
     path: Path<(String,)>,
     opt_user: UserIdentityOptional,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
-
     let Some(user) = opt_user.identity else {
-        let target_user = conn
-            .get_user_by_name(&path.0)
+        let target_user = db
+            .get_user_by_name(path.0.clone())
+            .await
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(block(move || db.get()?.get_activity(data.into_inner(), target_user.id)).await??))
+            return Ok(web::Json(
+                db.get_activity(data.into_inner(), target_user.id).await?,
+            ));
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         };
     };
 
     let data = if path.0 == "@me" {
-        block(move || conn.get_activity(data.into_inner(), user.id)).await??
+        db.get_activity(data.into_inner(), user.id).await?
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
-        let target_user = conn
-            .get_user_by_name(&path.0)
+        let target_user = db
+            .get_user_by_name(path.0.clone())
+            .await
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.id == user.id
             || target_user.is_public
-            || block(move || conn.are_friends(user.id, target_user.id)).await??
+            || db.are_friends(user.id, target_user.id).await?
         {
-            block(move || db.get()?.get_activity(data.into_inner(), target_user.id)).await??
+            db.get_activity(data.into_inner(), target_user.id).await?
         } else {
             return Err(TimeError::Unauthorized);
         }
@@ -159,35 +157,36 @@ pub async fn get_activities(
 pub async fn get_activity_summary(
     path: Path<(String,)>,
     opt_user: UserIdentityOptional,
-    db: Data<Database>,
+    db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    let mut conn = db.get()?;
     let data = if let Some(user) = opt_user.identity {
         if path.0 == "@me" {
-            block(move || conn.get_all_activity(user.id)).await??
+            db.get_all_activity(user.id).await?
         } else {
-            let target_user = conn
-                .get_user_by_name(&path.0)
+            let target_user = db
+                .get_user_by_name(path.0.clone())
+                .await
                 .map_err(|_| TimeError::UserNotFound)?;
 
             if target_user.id == user.id
                 || target_user.is_public
-                || block(move || db.get()?.are_friends(user.id, target_user.id)).await??
+                || db.are_friends(user.id, target_user.id).await?
             {
-                block(move || conn.get_all_activity(target_user.id)).await??
+                db.get_all_activity(target_user.id).await?
             } else {
                 return Err(TimeError::Unauthorized);
             }
         }
     } else {
-        let target_user = conn
-            .get_user_by_name(&path.0)
+        let target_user = db
+            .get_user_by_name(path.0.clone())
+            .await
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            block(move || conn.get_all_activity(target_user.id)).await??
+            db.get_all_activity(target_user.id).await?
         } else {
-            return Err(TimeError::Unauthorized);
+            return Err(TimeError::UserNotFound);
         }
     };
 

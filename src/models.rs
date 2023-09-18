@@ -221,9 +221,20 @@ pub struct CurrentActivity {
     pub heartbeat: HeartBeat,
 }
 
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
+pub struct FriendWithTime {
+    pub user: UserIdentity,
+    pub coding_time: CodingTimeSteps,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct FriendWithTimeAndStatus {
     pub username: String,
     pub coding_time: CodingTimeSteps,
     pub status: Option<CurrentActivity>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
+pub struct SecuredAccessTokenResponse {
+    pub token: String,
 }

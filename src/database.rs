@@ -1,3 +1,10 @@
+use std::{future::Future, pin::Pin, sync::Arc};
+
+use actix_web::{
+    dev::Payload,
+    web::{block, Data},
+    FromRequest, HttpRequest,
+};
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
@@ -8,197 +15,130 @@ use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, Pool},
 };
+use futures_util::{
+    future::OptionFuture,
+    stream::{self, StreamExt},
+};
 
 use crate::{
     error::TimeError,
     models::*,
     requests::{DataRequest, HeartBeat},
     utils::*,
-    DbConnection,
 };
 
+type DatabaseConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+
 pub struct Database {
-    pub backend: Box<dyn DatabaseConnectionPool>,
+    backend: Pool<ConnectionManager<PgConnection>>,
+}
+
+pub struct DatabaseWrapper {
+    db: Arc<Database>,
+}
+
+impl FromRequest for DatabaseWrapper {
+    type Error = TimeError;
+    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let wrapper = DatabaseWrapper {
+            db: req
+                .app_data::<Data<Database>>()
+                .unwrap()
+                .clone()
+                .into_inner(),
+        };
+
+        Box::pin(async move { Ok(wrapper) })
+    }
 }
 
 impl Database {
-    pub fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError> {
-        self.backend.get()
+    fn get(&self) -> Result<DatabaseConnection, TimeError> {
+        Ok(self.backend.get()?)
+    }
+
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+        Self { backend: pool }
     }
 }
 
-pub trait DatabaseConnectionPool: Send + Sync {
-    fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError>;
-}
+impl DatabaseWrapper {
+    async fn run_async_query<
+        T: Send + 'static,
+        F: FnOnce(DatabaseConnection) -> Result<T, TimeError> + Send + 'static,
+    >(
+        &self,
+        query: F,
+    ) -> Result<T, TimeError> {
+        let conn = self.db.get()?;
 
-impl DatabaseConnectionPool for Pool<ConnectionManager<PgConnection>> {
-    fn get(&self) -> Result<Box<dyn DatabaseConnection>, TimeError> {
-        Ok(Box::new(self.get()?))
+        block(move || query(conn)).await?
     }
 }
 
-pub trait DatabaseConnection: Send {
-    fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError>;
-
-    fn get_user_by_name(&mut self, target_username: &str) -> Result<UserIdentity, TimeError>;
-
-    fn delete_user(&mut self, userid: i32) -> Result<bool, TimeError>;
-
-    fn get_user_by_id(&mut self, userid: i32) -> Result<UserIdentity, TimeError>;
-
-    fn verify_user_password(
-        &mut self,
-        username: &str,
-        password: &str,
-    ) -> Result<Option<UserIdentity>, TimeError>;
-
-    fn regenerate_token(&mut self, userid: i32) -> Result<String, TimeError>;
-
-    fn new_testaustime_user(
-        &mut self,
-        username: &str,
-        password: &str,
-    ) -> Result<NewUserIdentity, TimeError>;
-
-    fn change_username(&mut self, user: i32, new_username: &str) -> Result<(), TimeError>;
-
-    fn change_password(&mut self, user: i32, new_password: &str) -> Result<(), TimeError>;
-
-    fn get_user_by_token(&mut self, token: &str) -> Result<UserIdentity, TimeError>;
-
-    fn add_activity(
-        &mut self,
-        updated_user_id: i32,
-        heartbeat: HeartBeat,
-        ctx_start_time: NaiveDateTime,
-        ctx_duration: Duration,
-    ) -> Result<(), TimeError>;
-
-    fn get_all_activity(&mut self, user: i32) -> Result<Vec<CodingActivity>, TimeError>;
-
-    fn get_activity(
-        &mut self,
-        request: DataRequest,
-        user: i32,
-    ) -> Result<Vec<CodingActivity>, TimeError>;
-
-    fn add_friend(&mut self, user: i32, friend: &str) -> Result<UserIdentity, TimeError>;
-
-    fn get_friends(&mut self, user: i32) -> Result<Vec<UserIdentity>, TimeError>;
-
-    fn are_friends(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError>;
-
-    fn remove_friend(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError>;
-
-    fn regenerate_friend_code(&mut self, userid: i32) -> Result<String, TimeError>;
-
-    fn delete_activity(&mut self, userid: i32, activity: i32) -> Result<bool, TimeError>;
-
-    fn create_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError>;
-
-    fn regenerate_leaderboard_invite(&mut self, lid: i32) -> Result<String, TimeError>;
-
-    fn delete_leaderboard(&mut self, lname: &str) -> Result<bool, TimeError>;
-
-    fn get_leaderboard_id_by_name(&mut self, lname: &str) -> Result<i32, TimeError>;
-
-    fn get_leaderboard(&mut self, lname: &str) -> Result<PrivateLeaderboard, TimeError>;
-
-    fn add_user_to_leaderboard(
-        &mut self,
-        uid: i32,
-        invite: &str,
-    ) -> Result<crate::api::users::ListLeaderboard, TimeError>;
-
-    fn remove_user_from_leaderboard(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError>;
-
-    fn promote_user_to_leaderboard_admin(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError>;
-
-    fn demote_user_to_leaderboard_member(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError>;
-
-    fn is_leaderboard_member(&mut self, uid: i32, lid: i32) -> Result<bool, TimeError>;
-
-    fn get_user_coding_time_since(
-        &mut self,
-        uid: i32,
-        since: chrono::NaiveDateTime,
-    ) -> Result<i32, TimeError>;
-
-    fn is_leaderboard_admin(&mut self, uid: i32, lid: i32) -> Result<bool, TimeError>;
-
-    fn get_leaderboard_admin_count(&mut self, lid: i32) -> Result<i64, TimeError>;
-
-    fn get_user_leaderboards(
-        &mut self,
-        uid: i32,
-    ) -> Result<Vec<crate::api::users::ListLeaderboard>, TimeError>;
-
-    fn get_coding_time_steps(&mut self, uid: i32) -> CodingTimeSteps;
-
-    fn get_testaustime_user_by_id(&mut self, uid: i32) -> Result<TestaustimeUser, TimeError>;
-
-    #[cfg(feature = "testausid")]
-    fn testausid_login(
-        &mut self,
-        user_id_arg: String,
-        username: String,
-        platform_id: String,
-    ) -> Result<String, TimeError>;
-
-    fn change_visibility(&mut self, userid: i32, visibility: bool) -> Result<(), TimeError>;
-
-    fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError>;
-
-    fn rename_project(&mut self, user_id: i32, from: &str, to: &str) -> Result<usize, TimeError>;
-
-    fn get_total_user_count(&mut self) -> Result<u64, TimeError>;
-
-    fn get_total_coding_time(&mut self) -> Result<u64, TimeError>;
-}
-
-impl DatabaseConnection for DbConnection {
-    fn user_exists(&mut self, target_username: &str) -> Result<bool, TimeError> {
+impl DatabaseWrapper {
+    pub async fn user_exists(&self, target_username: String) -> Result<bool, TimeError> {
         use crate::schema::user_identities::dsl::*;
-        Ok(user_identities
-            .filter(username.eq(target_username))
-            .first::<UserIdentity>(self)
-            .optional()?
-            .is_some())
+
+        self.run_async_query(move |mut conn| {
+            Ok(user_identities
+                .filter(username.eq(target_username))
+                .first::<UserIdentity>(&mut conn)
+                .optional()?
+                .is_some())
+        })
+        .await
     }
 
-    fn get_user_by_name(&mut self, target_username: &str) -> Result<UserIdentity, TimeError> {
+    pub async fn get_user_by_name(
+        &self,
+        target_username: String,
+    ) -> Result<UserIdentity, TimeError> {
         use crate::schema::user_identities::dsl::*;
         sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
 
-        Ok(user_identities
-            .filter(lower(username).eq(target_username.to_lowercase()))
-            .first::<UserIdentity>(self)?)
+        self.run_async_query(move |mut conn| {
+            Ok(user_identities
+                .filter(lower(username).eq(target_username.to_lowercase()))
+                .first::<UserIdentity>(&mut conn)?)
+        })
+        .await
     }
 
-    fn delete_user(&mut self, userid: i32) -> Result<bool, TimeError> {
+    pub async fn delete_user(&self, userid: i32) -> Result<bool, TimeError> {
         use crate::schema::user_identities::dsl::*;
-        Ok(diesel::delete(user_identities.filter(id.eq(userid))).execute(self)? > 0)
+
+        self.run_async_query(move |mut conn| {
+            Ok(diesel::delete(user_identities.filter(id.eq(userid))).execute(&mut conn)? > 0)
+        })
+        .await
     }
 
-    fn get_user_by_id(&mut self, userid: i32) -> Result<UserIdentity, TimeError> {
+    pub async fn get_user_by_id(&self, userid: i32) -> Result<UserIdentity, TimeError> {
         use crate::schema::user_identities::dsl::*;
-        Ok(user_identities
-            .filter(id.eq(userid))
-            .first::<UserIdentity>(self)?)
+
+        self.run_async_query(move |mut conn| {
+            Ok(user_identities
+                .filter(id.eq(userid))
+                .first::<UserIdentity>(&mut conn)?)
+        })
+        .await
     }
 
-    fn verify_user_password(
-        &mut self,
+    pub async fn verify_user_password(
+        &self,
         username: &str,
         password: &str,
     ) -> Result<Option<UserIdentity>, TimeError> {
-        let user = self.get_user_by_name(username)?;
-        let tuser = self.get_testaustime_user_by_id(user.id)?;
+        let user = self.get_user_by_name(username.to_string()).await?;
+        let tuser = self.get_testaustime_user_by_id(user.id).await?;
 
         let argon2 = Argon2::default();
         let Ok(salt) = SaltString::new(std::str::from_utf8(&tuser.salt).unwrap()) else {
-        return Ok(None); // The user has no password
-    };
+            return Ok(None); // The user has no password
+        };
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
         if password_hash.hash.unwrap().as_bytes() == tuser.password {
             Ok(Some(user))
@@ -207,23 +147,33 @@ impl DatabaseConnection for DbConnection {
         }
     }
 
-    fn regenerate_token(&mut self, userid: i32) -> Result<String, TimeError> {
+    pub async fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {
         let token = crate::utils::generate_token();
-        use crate::schema::user_identities::dsl::*;
-        diesel::update(crate::schema::user_identities::table)
-            .filter(id.eq(userid))
-            .set(auth_token.eq(&token))
-            .execute(self)?;
+
+        let token_clone = token.clone();
+
+        self.run_async_query(move |mut conn| {
+            use crate::schema::user_identities::dsl::*;
+
+            diesel::update(crate::schema::user_identities::table)
+                .filter(id.eq(userid))
+                .set(auth_token.eq(token_clone))
+                .execute(&mut conn)?;
+
+            Ok(())
+        })
+        .await?;
+
         Ok(token)
     }
 
-    fn new_testaustime_user(
-        &mut self,
+    pub async fn new_testaustime_user(
+        &self,
         username: &str,
         password: &str,
     ) -> Result<NewUserIdentity, TimeError> {
         use crate::schema::{testaustime_users, user_identities};
-        if self.user_exists(username)? {
+        if self.user_exists(username.to_string()).await? {
             return Err(TimeError::UserExists);
         }
         let salt = SaltString::generate(&mut OsRng);
@@ -237,72 +187,97 @@ impl DatabaseConnection for DbConnection {
             username: username.to_string(),
             friend_code: generate_friend_code(),
         };
-        let id = diesel::insert_into(crate::schema::user_identities::table)
-            .values(&new_user)
-            .returning(user_identities::id)
-            .get_results::<i32>(self)
-            .map_err(|_| TimeError::UserExists)?;
 
-        let testaustime_user = NewTestaustimeUser {
-            password: hash.as_bytes().to_vec(),
-            salt: salt.as_bytes().to_vec(),
-            identity: id[0],
-        };
+        let new_user_clone = new_user.clone();
 
-        diesel::insert_into(testaustime_users::table)
-            .values(&testaustime_user)
-            .execute(self)?;
+        self.run_async_query(move |mut conn| {
+            let id = diesel::insert_into(crate::schema::user_identities::table)
+                .values(new_user_clone)
+                .returning(user_identities::id)
+                .get_results::<i32>(&mut conn)
+                .map_err(|_| TimeError::UserExists)?;
+
+            let testaustime_user = NewTestaustimeUser {
+                password: hash.as_bytes().to_vec(),
+                salt: salt.as_bytes().to_vec(),
+                identity: id[0],
+            };
+
+            diesel::insert_into(testaustime_users::table)
+                .values(&testaustime_user)
+                .execute(&mut conn)?;
+
+            Ok(())
+        })
+        .await?;
 
         Ok(new_user)
     }
 
-    fn change_username(&mut self, user: i32, new_username: &str) -> Result<(), TimeError> {
-        if self.user_exists(new_username)? {
+    pub async fn change_username(&self, user: i32, new_username: String) -> Result<(), TimeError> {
+        if self.user_exists(new_username.to_string()).await? {
             return Err(TimeError::UserExists);
         }
-        use crate::schema::user_identities::dsl::*;
-        diesel::update(crate::schema::user_identities::table)
-            .filter(id.eq(user))
-            .set(username.eq(new_username))
-            .execute(self)
-            .map_err(|_| TimeError::UserExists)?;
+
+        self.run_async_query(move |mut conn| {
+            use crate::schema::user_identities::dsl::*;
+            diesel::update(crate::schema::user_identities::table)
+                .filter(id.eq(user))
+                .set(username.eq(new_username))
+                .execute(&mut conn)
+                .map_err(|_| TimeError::UserExists)?;
+            Ok(())
+        })
+        .await?;
+
         Ok(())
     }
 
-    fn change_password(&mut self, user: i32, new_password: &str) -> Result<(), TimeError> {
+    pub async fn change_password(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
         let new_salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
         let password_hash = argon2
             .hash_password(new_password.as_bytes(), &new_salt)
             .unwrap();
         let new_hash = password_hash.hash.unwrap();
-        use crate::schema::testaustime_users::dsl::*;
-        diesel::update(crate::schema::testaustime_users::table)
-            .filter(identity.eq(user))
-            .set((
-                password.eq(&new_hash.as_bytes()),
-                salt.eq(new_salt.as_bytes()),
-            ))
-            .execute(self)?;
+
+        self.run_async_query(move |mut conn| {
+            use crate::schema::testaustime_users::dsl::*;
+            diesel::update(crate::schema::testaustime_users::table)
+                .filter(identity.eq(user))
+                .set((
+                    password.eq(&new_hash.as_bytes()),
+                    salt.eq(new_salt.as_bytes()),
+                ))
+                .execute(&mut conn)?;
+            Ok(())
+        })
+        .await?;
+
         Ok(())
     }
 
-    fn get_user_by_token(&mut self, token: &str) -> Result<UserIdentity, TimeError> {
-        use crate::schema::user_identities::dsl::*;
-        let user = user_identities
-            .filter(auth_token.eq(token))
-            .first::<UserIdentity>(self)?;
+    pub async fn get_user_by_token(&self, token: String) -> Result<UserIdentity, TimeError> {
+        let user = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::user_identities::dsl::*;
+
+                Ok(user_identities
+                    .filter(auth_token.eq(token))
+                    .first::<UserIdentity>(&mut conn)?)
+            })
+            .await?;
+
         Ok(user)
     }
 
-    fn add_activity(
-        &mut self,
+    pub async fn add_activity(
+        &self,
         updated_user_id: i32,
         heartbeat: HeartBeat,
         ctx_start_time: NaiveDateTime,
         ctx_duration: Duration,
     ) -> Result<(), TimeError> {
-        use crate::schema::coding_activities::dsl::*;
         let activity = NewCodingActivity {
             user_id: updated_user_id,
             start_time: ctx_start_time,
@@ -318,21 +293,33 @@ impl DatabaseConnection for DbConnection {
             editor_name: heartbeat.editor_name,
             hostname: heartbeat.hostname,
         };
-        diesel::insert_into(coding_activities)
-            .values(activity)
-            .execute(self)?;
+
+        self.run_async_query(move |mut conn| {
+            use crate::schema::coding_activities::dsl::*;
+
+            diesel::insert_into(coding_activities)
+                .values(activity)
+                .execute(&mut conn)?;
+
+            Ok(())
+        })
+        .await?;
+
         Ok(())
     }
 
-    fn get_all_activity(&mut self, user: i32) -> Result<Vec<CodingActivity>, TimeError> {
-        use crate::schema::coding_activities::dsl::*;
-        Ok(coding_activities
-            .filter(user_id.eq(user))
-            .load::<CodingActivity>(self)?)
+    pub async fn get_all_activity(&self, user: i32) -> Result<Vec<CodingActivity>, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::coding_activities::dsl::*;
+            Ok(coding_activities
+                .filter(user_id.eq(user))
+                .load::<CodingActivity>(&mut conn)?)
+        })
+        .await
     }
 
-    fn get_activity(
-        &mut self,
+    pub async fn get_activity(
+        &self,
         request: DataRequest,
         user: i32,
     ) -> Result<Vec<CodingActivity>, TimeError> {
@@ -359,19 +346,25 @@ impl DatabaseConnection for DbConnection {
         if let Some(min_duration) = request.min_duration {
             query = query.filter(duration.ge(min_duration));
         };
-        let res = query.load::<CodingActivity>(self)?;
-        Ok(res)
+
+        self.run_async_query(move |mut conn| Ok(query.load::<CodingActivity>(&mut conn)?))
+            .await
     }
 
-    fn add_friend(&mut self, user: i32, friend: &str) -> Result<UserIdentity, TimeError> {
-        use crate::schema::user_identities::dsl::*;
-        let Some(friend) = user_identities
-        .filter(friend_code.eq(friend))
-        .first::<UserIdentity>(self)
-        .optional()?
-    else {
-        return Err(TimeError::UserNotFound)
-    };
+    pub async fn add_friend(&self, user: i32, friend: String) -> Result<UserIdentity, TimeError> {
+        let Some(friend) = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::user_identities::dsl::*;
+
+                Ok(user_identities
+                    .filter(friend_code.eq(friend))
+                    .first::<UserIdentity>(&mut conn)
+                    .optional()?)
+            })
+            .await?
+        else {
+            return Err(TimeError::UserNotFound);
+        };
 
         if friend.id == user {
             return Err(TimeError::CurrentUser);
@@ -383,172 +376,299 @@ impl DatabaseConnection for DbConnection {
             (friend.id, user)
         };
 
-        insert_into(crate::schema::friend_relations::table)
-            .values(crate::models::NewFriendRelation {
-                lesser_id: lesser,
-                greater_id: greater,
-            })
-            .execute(self)?;
+        self.run_async_query(move |mut conn| {
+            insert_into(crate::schema::friend_relations::table)
+                .values(crate::models::NewFriendRelation {
+                    lesser_id: lesser,
+                    greater_id: greater,
+                })
+                .execute(&mut conn)?;
+            Ok(())
+        })
+        .await?;
+
         Ok(friend)
     }
 
-    fn get_friends(&mut self, user: i32) -> Result<Vec<UserIdentity>, TimeError> {
+    #[allow(dead_code)]
+    pub async fn get_friends(&self, user: i32) -> Result<Vec<UserIdentity>, TimeError> {
         use crate::schema::{
             friend_relations::dsl::{friend_relations, greater_id, lesser_id},
             user_identities::dsl::*,
         };
-        let friends = friend_relations
-            .filter(greater_id.eq(user).or(lesser_id.eq(user)))
-            .load::<FriendRelation>(self)?
-            .iter()
-            .map(
-                |&FriendRelation {
-                     lesser_id: other_lesser_id,
-                     greater_id: other_greater_id,
-                     ..
-                 }| {
-                    if other_lesser_id == user {
-                        other_greater_id
-                    } else {
-                        other_lesser_id
-                    }
-                },
-            )
-            .filter_map(|cur_friend| {
-                user_identities
-                    .filter(id.eq(cur_friend))
-                    .first::<UserIdentity>(self)
-                    .ok()
+
+        let friends = self
+            .run_async_query(move |mut conn| {
+                Ok(friend_relations
+                    .filter(greater_id.eq(user).or(lesser_id.eq(user)))
+                    .load::<FriendRelation>(&mut conn)?
+                    .iter()
+                    .map(
+                        |&FriendRelation {
+                             lesser_id: other_lesser_id,
+                             greater_id: other_greater_id,
+                             ..
+                         }| {
+                            if other_lesser_id == user {
+                                other_greater_id
+                            } else {
+                                other_lesser_id
+                            }
+                        },
+                    )
+                    .filter_map(|cur_friend| {
+                        user_identities
+                            .filter(id.eq(cur_friend))
+                            .first::<UserIdentity>(&mut conn)
+                            .ok()
+                    })
+                    .collect())
             })
-            .collect();
+            .await?;
+
         Ok(friends)
     }
 
-    fn are_friends(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
+    pub async fn get_friends_with_time(&self, user: i32) -> Result<Vec<FriendWithTime>, TimeError> {
+        use crate::schema::{
+            friend_relations::dsl::{friend_relations, greater_id, lesser_id},
+            user_identities::dsl::*,
+        };
+
+        let friends = stream::iter(
+            self.run_async_query(move |mut conn| {
+                Ok(friend_relations
+                    .filter(greater_id.eq(user).or(lesser_id.eq(user)))
+                    .load::<FriendRelation>(&mut conn)?
+                    .iter()
+                    .map(|fr| {
+                        if fr.lesser_id == user {
+                            fr.greater_id
+                        } else {
+                            fr.lesser_id
+                        }
+                    })
+                    .collect::<Vec<_>>())
+            })
+            .await?,
+        )
+        .then(|cur_friend| async move {
+            let opt_friends = self
+                .run_async_query(move |mut conn| {
+                    Ok(user_identities
+                        .filter(id.eq(cur_friend))
+                        .first::<UserIdentity>(&mut conn)
+                        .ok())
+                })
+                .await
+                .unwrap();
+
+            let future: OptionFuture<_> = opt_friends
+                .map(|friend| async {
+                    FriendWithTime {
+                        coding_time: self.get_coding_time_steps(friend.id).await,
+                        user: friend,
+                    }
+                })
+                .into();
+
+            future.await.unwrap()
+        })
+        .collect::<Vec<FriendWithTime>>()
+        .await;
+
+        Ok(friends)
+    }
+
+    pub async fn are_friends(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
         use crate::schema::friend_relations::dsl::*;
         let (lesser, greater) = if user < friend_id {
             (user, friend_id)
         } else {
             (friend_id, user)
         };
-        Ok(friend_relations
-            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
-            .first::<FriendRelation>(self)
-            .optional()?
-            .is_some())
+
+        self.run_async_query(move |mut conn| {
+            Ok(friend_relations
+                .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+                .first::<FriendRelation>(&mut conn)
+                .optional()?
+                .is_some())
+        })
+        .await
     }
 
-    fn remove_friend(&mut self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
+    pub async fn remove_friend(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
         use crate::schema::friend_relations::dsl::*;
         let (lesser, greater) = if user < friend_id {
             (user, friend_id)
         } else {
             (friend_id, user)
         };
-        Ok(diesel::delete(friend_relations)
-            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
-            .execute(self)?
-            != 0)
+
+        self.run_async_query(move |mut conn| {
+            Ok(diesel::delete(friend_relations)
+                .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+                .execute(&mut conn)?
+                != 0)
+        })
+        .await
     }
 
-    fn regenerate_friend_code(&mut self, userid: i32) -> Result<String, TimeError> {
+    pub async fn regenerate_friend_code(&self, userid: i32) -> Result<String, TimeError> {
         use crate::schema::user_identities::dsl::*;
         let code = crate::utils::generate_friend_code();
-        diesel::update(crate::schema::user_identities::table)
-            .filter(id.eq(userid))
-            .set(friend_code.eq(&code))
-            .execute(self)?;
+        let code_clone = code.clone();
+
+        self.run_async_query(move |mut conn| {
+            diesel::update(crate::schema::user_identities::table)
+                .filter(id.eq(userid))
+                .set(friend_code.eq(code_clone))
+                .execute(&mut conn)?;
+
+            Ok(())
+        })
+        .await?;
+
         Ok(code)
     }
 
-    fn delete_activity(&mut self, userid: i32, activity: i32) -> Result<bool, TimeError> {
+    pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
         use crate::schema::coding_activities::dsl::*;
-        let res = diesel::delete(crate::schema::coding_activities::table)
-            .filter(id.eq(activity))
-            .filter(user_id.eq(userid))
-            .execute(self)?;
+
+        let res = self
+            .run_async_query(move |mut conn| {
+                Ok(diesel::delete(crate::schema::coding_activities::table)
+                    .filter(id.eq(activity))
+                    .filter(user_id.eq(userid))
+                    .execute(&mut conn)?)
+            })
+            .await?;
+
         Ok(res != 0)
     }
 
-    fn create_leaderboard(&mut self, creator_id: i32, name: &str) -> Result<String, TimeError> {
+    pub async fn create_leaderboard(
+        &self,
+        creator_id: i32,
+        name: &str,
+    ) -> Result<String, TimeError> {
         let code = crate::utils::generate_token();
         let board = NewLeaderboard {
             name: name.to_string(),
             creation_time: chrono::Local::now().naive_local(),
             invite_code: code.clone(),
         };
-        let lid = {
-            use crate::schema::leaderboards::dsl::*;
-            insert_into(crate::schema::leaderboards::table)
-                .values(&board)
-                .returning(id)
-                .get_results(self)?[0]
-        };
+
+        let lid = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboards::dsl::*;
+
+                Ok(insert_into(crate::schema::leaderboards::table)
+                    .values(&board)
+                    .returning(id)
+                    .get_results(&mut conn)?[0])
+            })
+            .await?;
 
         let admin = NewLeaderboardMember {
             user_id: creator_id,
             admin: true,
             leaderboard_id: lid,
         };
-        insert_into(crate::schema::leaderboard_members::table)
-            .values(&admin)
-            .execute(self)?;
+
+        self.run_async_query(move |mut conn| {
+            insert_into(crate::schema::leaderboard_members::table)
+                .values(admin)
+                .execute(&mut conn)?;
+
+            Ok(())
+        })
+        .await?;
+
         Ok(code)
     }
 
-    fn regenerate_leaderboard_invite(&mut self, lid: i32) -> Result<String, TimeError> {
+    pub async fn regenerate_leaderboard_invite(&self, lid: i32) -> Result<String, TimeError> {
         let newinvite = crate::utils::generate_token();
-        use crate::schema::leaderboards::dsl::*;
-        diesel::update(crate::schema::leaderboards::table)
-            .filter(id.eq(lid))
-            .set(invite_code.eq(&newinvite))
-            .execute(self)?;
+
+        let newinvite_clone = newinvite.clone();
+
+        self.run_async_query(move |mut conn| {
+            use crate::schema::leaderboards::dsl::*;
+            diesel::update(crate::schema::leaderboards::table)
+                .filter(id.eq(lid))
+                .set(invite_code.eq(newinvite_clone))
+                .execute(&mut conn)?;
+            Ok(())
+        })
+        .await?;
+
         Ok(newinvite)
     }
 
-    fn delete_leaderboard(&mut self, lname: &str) -> Result<bool, TimeError> {
-        use crate::schema::leaderboards::dsl::*;
-        let res = diesel::delete(crate::schema::leaderboards::table)
-            .filter(name.eq(lname))
-            .execute(self)?;
+    pub async fn delete_leaderboard(&self, lname: String) -> Result<bool, TimeError> {
+        let res = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboards::dsl::*;
+                Ok(diesel::delete(crate::schema::leaderboards::table)
+                    .filter(name.eq(lname))
+                    .execute(&mut conn)?)
+            })
+            .await?;
+
         Ok(res != 0)
     }
 
-    fn get_leaderboard_id_by_name(&mut self, lname: &str) -> Result<i32, TimeError> {
-        sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
-        use crate::schema::leaderboards::dsl::*;
-        Ok(leaderboards
-            .filter(lower(name).eq(lname.to_lowercase()))
-            .select(id)
-            .first::<i32>(self)?)
+    pub async fn get_leaderboard_id_by_name(&self, lname: String) -> Result<i32, TimeError> {
+        self.run_async_query(move |mut conn| {
+            sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+            use crate::schema::leaderboards::dsl::*;
+
+            Ok(leaderboards
+                .filter(lower(name).eq(lname.to_lowercase()))
+                .select(id)
+                .first::<i32>(&mut conn)?)
+        })
+        .await
     }
 
-    fn get_leaderboard(&mut self, lname: &str) -> Result<PrivateLeaderboard, TimeError> {
+    pub async fn get_leaderboard(&self, lname: String) -> Result<PrivateLeaderboard, TimeError> {
         sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
-        let board = {
-            use crate::schema::leaderboards::dsl::*;
-            leaderboards
-                .filter(lower(name).eq(lname.to_lowercase()))
-                .first::<Leaderboard>(self)?
-        };
-        let members = {
-            use crate::schema::leaderboard_members::dsl::*;
-            leaderboard_members
-                .filter(leaderboard_id.eq(board.id))
-                .load::<LeaderboardMember>(self)?
-        };
+        let board = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboards::dsl::*;
+
+                Ok(leaderboards
+                    .filter(lower(name).eq(lname.to_lowercase()))
+                    .first::<Leaderboard>(&mut conn)?)
+            })
+            .await?;
+
+        let members = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboard_members::dsl::*;
+
+                Ok(leaderboard_members
+                    .filter(leaderboard_id.eq(board.id))
+                    .load::<LeaderboardMember>(&mut conn)?)
+            })
+            .await?;
+
         let mut fullmembers = Vec::new();
         let aweekago = NaiveDateTime::new(
             chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
             chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
         );
+
         for m in members {
-            if let Ok(user) = self.get_user_by_id(m.user_id) {
+            if let Ok(user) = self.get_user_by_id(m.user_id).await {
                 fullmembers.push(PrivateLeaderboardMember {
                     username: user.username,
                     admin: m.admin,
                     time_coded: self
                         .get_user_coding_time_since(m.user_id, aweekago)
+                        .await
                         .unwrap_or(0),
                 });
             }
@@ -561,137 +681,197 @@ impl DatabaseConnection for DbConnection {
         })
     }
 
-    fn add_user_to_leaderboard(
-        &mut self,
+    pub async fn add_user_to_leaderboard(
+        &self,
         uid: i32,
-        invite: &str,
+        invite: String,
     ) -> Result<crate::api::users::ListLeaderboard, TimeError> {
-        let (lid, name) = {
-            use crate::schema::leaderboards::dsl::*;
-            leaderboards
-                .filter(invite_code.eq(invite))
-                .select((id, name))
-                .first::<(i32, String)>(self)?
-        };
+        let (lid, name) = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboards::dsl::*;
+                Ok(leaderboards
+                    .filter(invite_code.eq(invite))
+                    .select((id, name))
+                    .first::<(i32, String)>(&mut conn)?)
+            })
+            .await?;
+
         let user = NewLeaderboardMember {
             user_id: uid,
             leaderboard_id: lid,
             admin: false,
         };
-        insert_into(crate::schema::leaderboard_members::table)
-            .values(&user)
-            .execute(self)?;
-        let member_count: i32 = {
-            use crate::schema::leaderboard_members::dsl::*;
-            leaderboard_members
-                .filter(leaderboard_id.eq(lid))
-                .select(diesel::dsl::count(user_id))
-                .first::<i64>(self)? as i32
-        };
+
+        self.run_async_query(move |mut conn| {
+            insert_into(crate::schema::leaderboard_members::table)
+                .values(&user)
+                .execute(&mut conn)?;
+            Ok(())
+        })
+        .await?;
+
+        let member_count: i32 = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboard_members::dsl::*;
+                Ok(leaderboard_members
+                    .filter(leaderboard_id.eq(lid))
+                    .select(diesel::dsl::count(user_id))
+                    .first::<i64>(&mut conn)? as i32)
+            })
+            .await?;
+
         Ok(crate::api::users::ListLeaderboard { name, member_count })
     }
 
-    fn remove_user_from_leaderboard(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError> {
+    pub async fn remove_user_from_leaderboard(
+        &self,
+        lid: i32,
+        uid: i32,
+    ) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        let res = diesel::delete(crate::schema::leaderboard_members::table)
-            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-            .execute(self)?;
+        let res = self
+            .run_async_query(move |mut conn| {
+                Ok(diesel::delete(crate::schema::leaderboard_members::table)
+                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+                    .execute(&mut conn)?)
+            })
+            .await?;
+
         Ok(res != 0)
     }
 
-    fn promote_user_to_leaderboard_admin(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError> {
+    pub async fn promote_user_to_leaderboard_admin(
+        &self,
+        lid: i32,
+        uid: i32,
+    ) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        let res = diesel::update(crate::schema::leaderboard_members::table)
-            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-            .set(admin.eq(true))
-            .execute(self)?;
+        let res = self
+            .run_async_query(move |mut conn| {
+                Ok(diesel::update(crate::schema::leaderboard_members::table)
+                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+                    .set(admin.eq(true))
+                    .execute(&mut conn)?)
+            })
+            .await?;
+
         Ok(res != 0)
     }
 
-    fn demote_user_to_leaderboard_member(&mut self, lid: i32, uid: i32) -> Result<bool, TimeError> {
-        use crate::schema::leaderboard_members::dsl::*;
-        let res = diesel::update(crate::schema::leaderboard_members::table)
-            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-            .set(admin.eq(false))
-            .execute(self)?;
+    pub async fn demote_user_to_leaderboard_member(
+        &self,
+        lid: i32,
+        uid: i32,
+    ) -> Result<bool, TimeError> {
+        let res = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboard_members::dsl::*;
+
+                Ok(diesel::update(crate::schema::leaderboard_members::table)
+                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+                    .set(admin.eq(false))
+                    .execute(&mut conn)?)
+            })
+            .await?;
         Ok(res != 0)
     }
 
-    fn is_leaderboard_member(&mut self, uid: i32, lid: i32) -> Result<bool, TimeError> {
-        use crate::schema::leaderboard_members::dsl::*;
-        Ok(leaderboard_members
-            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-            .select(id)
-            .first::<i32>(self)
-            .optional()?
-            .is_some())
+    pub async fn is_leaderboard_member(&self, uid: i32, lid: i32) -> Result<bool, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::leaderboard_members::dsl::*;
+
+            Ok(leaderboard_members
+                .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+                .select(id)
+                .first::<i32>(&mut conn)
+                .optional()?
+                .is_some())
+        })
+        .await
     }
 
-    fn get_user_coding_time_since(
-        &mut self,
+    pub async fn get_user_coding_time_since(
+        &self,
         uid: i32,
         since: chrono::NaiveDateTime,
     ) -> Result<i32, TimeError> {
-        use crate::schema::coding_activities::dsl::*;
-        Ok(coding_activities
-            .filter(user_id.eq(uid).and(start_time.ge(since)))
-            .select(diesel::dsl::sum(duration))
-            .first::<Option<i64>>(self)?
-            .unwrap_or(0) as i32)
+        self.run_async_query(move |mut conn| {
+            use crate::schema::coding_activities::dsl::*;
+
+            Ok(coding_activities
+                .filter(user_id.eq(uid).and(start_time.ge(since)))
+                .select(diesel::dsl::sum(duration))
+                .first::<Option<i64>>(&mut conn)?
+                .unwrap_or(0) as i32)
+        })
+        .await
     }
 
-    fn is_leaderboard_admin(&mut self, uid: i32, lid: i32) -> Result<bool, TimeError> {
+    pub async fn is_leaderboard_admin(&self, uid: i32, lid: i32) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        Ok(leaderboard_members
-            .filter(leaderboard_id.eq(lid).and(user_id.eq(uid)))
-            .select(admin)
-            .first::<bool>(self)
-            .optional()?
-            .unwrap_or(false))
+        self.run_async_query(move |mut conn| {
+            Ok(leaderboard_members
+                .filter(leaderboard_id.eq(lid).and(user_id.eq(uid)))
+                .select(admin)
+                .first::<bool>(&mut conn)
+                .optional()?
+                .unwrap_or(false))
+        })
+        .await
     }
 
-    fn get_leaderboard_admin_count(&mut self, lid: i32) -> Result<i64, TimeError> {
+    pub async fn get_leaderboard_admin_count(&self, lid: i32) -> Result<i64, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        Ok(leaderboard_members
-            .filter(leaderboard_id.eq(lid).and(admin.eq(true)))
-            .select(diesel::dsl::count(user_id))
-            .first::<i64>(self)?)
+        self.run_async_query(move |mut conn| {
+            Ok(leaderboard_members
+                .filter(leaderboard_id.eq(lid).and(admin.eq(true)))
+                .select(diesel::dsl::count(user_id))
+                .first::<i64>(&mut conn)?)
+        })
+        .await
     }
 
-    fn get_user_leaderboards(
-        &mut self,
+    pub async fn get_user_leaderboards(
+        &self,
         uid: i32,
     ) -> Result<Vec<crate::api::users::ListLeaderboard>, TimeError> {
-        let ids = {
-            use crate::schema::leaderboard_members::dsl::*;
-            leaderboard_members
-                .filter(user_id.eq(uid))
-                .select(leaderboard_id)
-                .order_by(leaderboard_id.asc())
-                .load::<i32>(self)?
-        };
-        let (names, memcount) = {
-            let n = {
-                use crate::schema::leaderboards::dsl::*;
-                leaderboards
-                    .filter(id.eq_any(&ids))
-                    .order_by(id.asc())
-                    .select(name)
-                    .load::<String>(self)?
-            };
-            let mut c = Vec::new();
-            // FIXME: Do this in the query
-            for i in ids {
-                c.push({
-                    use crate::schema::leaderboard_members::dsl::*;
-                    leaderboard_members
-                        .filter(leaderboard_id.eq(i))
-                        .select(diesel::dsl::count(user_id))
-                        .first::<i64>(self)? as i32
-                })
-            }
-            (n, c)
-        };
+        let ids = self
+            .run_async_query(move |mut conn| {
+                use crate::schema::leaderboard_members::dsl::*;
+
+                Ok(leaderboard_members
+                    .filter(user_id.eq(uid))
+                    .select(leaderboard_id)
+                    .order_by(leaderboard_id.asc())
+                    .load::<i32>(&mut conn)?)
+            })
+            .await?;
+
+        let (names, memcount) = self
+            .run_async_query(move |mut conn| {
+                let n = {
+                    use crate::schema::leaderboards::dsl::*;
+                    leaderboards
+                        .filter(id.eq_any(&ids))
+                        .order_by(id.asc())
+                        .select(name)
+                        .load::<String>(&mut conn)?
+                };
+                let mut c = Vec::new();
+                // FIXME: Do this in the query
+                for i in ids {
+                    c.push({
+                        use crate::schema::leaderboard_members::dsl::*;
+                        leaderboard_members
+                            .filter(leaderboard_id.eq(i))
+                            .select(diesel::dsl::count(user_id))
+                            .first::<i64>(&mut conn)? as i32
+                    })
+                }
+
+                Ok((n, c))
+            })
+            .await?;
         let mut ret = Vec::new();
         for (n, c) in names.iter().zip(memcount) {
             ret.push(crate::api::users::ListLeaderboard {
@@ -702,36 +882,43 @@ impl DatabaseConnection for DbConnection {
         Ok(ret)
     }
 
-    fn get_coding_time_steps(&mut self, uid: i32) -> CodingTimeSteps {
+    pub async fn get_coding_time_steps(&self, uid: i32) -> CodingTimeSteps {
         CodingTimeSteps {
             all_time: self
                 .get_user_coding_time_since(uid, chrono::NaiveDateTime::from_timestamp(0, 0))
+                .await
                 .unwrap_or(0),
             past_month: self
                 .get_user_coding_time_since(
                     uid,
                     chrono::Local::now().naive_local() - chrono::Duration::days(30),
                 )
+                .await
                 .unwrap_or(0),
             past_week: self
                 .get_user_coding_time_since(
                     uid,
                     chrono::Local::now().naive_local() - chrono::Duration::days(7),
                 )
+                .await
                 .unwrap_or(0),
         }
     }
 
-    fn get_testaustime_user_by_id(&mut self, uid: i32) -> Result<TestaustimeUser, TimeError> {
-        use crate::schema::testaustime_users::dsl::*;
-        Ok(testaustime_users
-            .filter(identity.eq(uid))
-            .first::<TestaustimeUser>(self)?)
+    pub async fn get_testaustime_user_by_id(&self, uid: i32) -> Result<TestaustimeUser, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::testaustime_users::dsl::*;
+
+            Ok(testaustime_users
+                .filter(identity.eq(uid))
+                .first::<TestaustimeUser>(&mut conn)?)
+        })
+        .await
     }
 
     #[cfg(feature = "testausid")]
-    fn testausid_login(
-        &mut self,
+    pub async fn testausid_login(
+        &self,
         user_id_arg: String,
         username: String,
         platform_id: String,
@@ -741,17 +928,27 @@ impl DatabaseConnection for DbConnection {
             user_identities::dsl::{auth_token, id, user_identities},
         };
 
-        let user_identity_opt = testausid_users
-            .filter(user_id.eq(&user_id_arg))
-            .select(identity)
-            .first::<i32>(self)
-            .optional()?;
+        let user_id_arg_clone = user_id_arg.clone();
+
+        let user_identity_opt = self
+            .run_async_query(move |mut conn| {
+                Ok(testausid_users
+                    .filter(user_id.eq(user_id_arg_clone))
+                    .select(identity)
+                    .first::<i32>(&mut conn)
+                    .optional()?)
+            })
+            .await?;
 
         if let Some(user_identity) = user_identity_opt {
-            let token = user_identities
-                .filter(id.eq(user_identity))
-                .select(auth_token)
-                .first::<String>(self)?;
+            let token = self
+                .run_async_query(move |mut conn| {
+                    Ok(user_identities
+                        .filter(id.eq(user_identity))
+                        .select(auth_token)
+                        .first::<String>(&mut conn)?)
+                })
+                .await?;
 
             Ok(token)
         } else {
@@ -763,11 +960,15 @@ impl DatabaseConnection for DbConnection {
                 username,
                 friend_code: generate_friend_code(),
             };
-            let new_user_id = diesel::insert_into(crate::schema::user_identities::table)
-                .values(&new_user)
-                .returning(id)
-                .get_results::<i32>(self)
-                .map_err(|_| TimeError::UserExists)?;
+            let new_user_id = self
+                .run_async_query(move |mut conn| {
+                    diesel::insert_into(crate::schema::user_identities::table)
+                        .values(&new_user)
+                        .returning(id)
+                        .get_results::<i32>(&mut conn)
+                        .map_err(|_| TimeError::UserExists)
+                })
+                .await?;
 
             let testausid_user = NewTestausIdUser {
                 user_id: user_id_arg,
@@ -775,60 +976,81 @@ impl DatabaseConnection for DbConnection {
                 service_id: platform_id,
             };
 
-            diesel::insert_into(testausid_users)
-                .values(&testausid_user)
-                .execute(self)?;
+            self.run_async_query(move |mut conn| {
+                diesel::insert_into(testausid_users)
+                    .values(&testausid_user)
+                    .execute(&mut conn)?;
+
+                Ok(())
+            })
+            .await?;
 
             Ok(token)
         }
     }
 
-    fn change_visibility(&mut self, userid: i32, visibility: bool) -> Result<(), TimeError> {
-        use crate::schema::user_identities::dsl::*;
-        diesel::update(user_identities.filter(id.eq(userid)))
-            .set(is_public.eq(visibility))
-            .execute(self)?;
-        Ok(())
+    pub async fn change_visibility(&self, userid: i32, visibility: bool) -> Result<(), TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::user_identities::dsl::*;
+            diesel::update(user_identities.filter(id.eq(userid)))
+                .set(is_public.eq(visibility))
+                .execute(&mut conn)?;
+            Ok(())
+        })
+        .await
     }
 
-    fn search_public_users(&mut self, search: &str) -> Result<Vec<PublicUser>, TimeError> {
-        use crate::schema::user_identities::dsl::*;
-        Ok(user_identities
-            .filter(is_public.eq(true))
-            .filter(username.like(format!("%{search}%")))
-            .load::<UserIdentity>(self)?
-            .into_iter()
-            .map(|u| u.into())
-            .collect())
+    pub async fn search_public_users(&self, search: String) -> Result<Vec<PublicUser>, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::user_identities::dsl::*;
+            Ok(user_identities
+                .filter(is_public.eq(true))
+                .filter(username.like(format!("%{search}%")))
+                .load::<UserIdentity>(&mut conn)?
+                .into_iter()
+                .map(|u| u.into())
+                .collect())
+        })
+        .await
     }
 
-    fn rename_project(
-        &mut self,
+    pub async fn rename_project(
+        &self,
         target_user_id: i32,
-        from: &str,
-        to: &str,
+        from: String,
+        to: String,
     ) -> Result<usize, TimeError> {
-        use crate::schema::coding_activities::dsl::*;
-        Ok(diesel::update(coding_activities)
-            .filter(user_id.eq(target_user_id))
-            .filter(project_name.eq(from))
-            .set(project_name.eq(to))
-            .execute(self)?)
+        self.run_async_query(move |mut conn| {
+            use crate::schema::coding_activities::dsl::*;
+            Ok(diesel::update(coding_activities)
+                .filter(user_id.eq(target_user_id))
+                .filter(project_name.eq(from))
+                .set(project_name.eq(to))
+                .execute(&mut conn)?)
+        })
+        .await
     }
 
-    fn get_total_user_count(&mut self) -> Result<u64, TimeError> {
-        use crate::schema::user_identities::dsl::*;
-        Ok(user_identities.count().first::<i64>(self)? as u64)
+    pub async fn get_total_user_count(&self) -> Result<u64, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use crate::schema::user_identities::dsl::*;
+
+            Ok(user_identities.count().first::<i64>(&mut conn)? as u64)
+        })
+        .await
     }
 
-    fn get_total_coding_time(&mut self) -> Result<u64, TimeError> {
-        use diesel::dsl::sum;
+    pub async fn get_total_coding_time(&self) -> Result<u64, TimeError> {
+        self.run_async_query(move |mut conn| {
+            use diesel::dsl::sum;
 
-        use crate::schema::coding_activities::dsl::*;
+            use crate::schema::coding_activities::dsl::*;
 
-        Ok(coding_activities
-            .select(sum(duration))
-            .first::<Option<i64>>(self)?
-            .unwrap_or_default() as u64)
+            Ok(coding_activities
+                .select(sum(duration))
+                .first::<Option<i64>>(&mut conn)?
+                .unwrap_or_default() as u64)
+        })
+        .await
     }
 }

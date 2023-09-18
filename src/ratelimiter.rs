@@ -96,7 +96,7 @@ impl Handler<IpRequest> for RateLimiterStorage {
                     Some(self.maxrpm - rlinfo.request_count),
                     Duration::from_secs(self.reset_interval as u64),
                 ))
-            } else if rlinfo.request_count as usize >= self.maxrpm {
+            } else if rlinfo.request_count >= self.maxrpm {
                 Ok((None, duration))
             } else {
                 rlinfo.request_count += 1;
@@ -123,6 +123,7 @@ pub struct RateLimiter {
     pub storage: Addr<RateLimiterStorage>,
     pub use_peer_addr: bool,
     pub maxrpm: usize,
+    pub bypass_token: String,
     pub reset_interval: usize,
 }
 
@@ -139,19 +140,16 @@ where
     type Future = LocalBoxFuture<'static, Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        let ratelimiter = self.storage.clone();
-        let use_peer_addr = self.use_peer_addr;
-        let maxrpm = self.maxrpm;
-        let reset_interval = self.reset_interval;
-        Box::pin(async move {
-            Ok(RateLimiterTransform {
-                service: Rc::new(service),
-                ratelimiter,
-                use_peer_addr,
-                maxrpm,
-                reset_interval,
-            })
-        })
+        let ratelimiter = RateLimiterTransform {
+            service: Rc::new(service),
+            ratelimiter: self.storage.clone(),
+            use_peer_addr: self.use_peer_addr,
+            bypass_token: self.bypass_token.clone(),
+            maxrpm: self.maxrpm,
+            reset_interval: self.reset_interval,
+        };
+
+        Box::pin(async { Ok(ratelimiter) })
     }
 }
 
@@ -160,6 +158,7 @@ pub struct RateLimiterTransform<S> {
     pub ratelimiter: Addr<RateLimiterStorage>,
     pub use_peer_addr: bool,
     pub maxrpm: usize,
+    pub bypass_token: String,
     pub reset_interval: usize,
 }
 
@@ -178,7 +177,16 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let conn_info = req.connection_info().clone();
         if let Some(ip) = {
-            if self.use_peer_addr {
+            let bypass = req
+                .headers()
+                .get("bypass-token")
+                .is_some_and(|token| token.to_str().is_ok_and(|token| self.bypass_token == token));
+
+            if bypass {
+                req.headers()
+                    .get("client-ip")
+                    .and_then(|ip| ip.to_str().ok())
+            } else if self.use_peer_addr {
                 conn_info.peer_addr()
             } else {
                 conn_info.realip_remote_addr()
@@ -187,10 +195,11 @@ where
             let res = self.ratelimiter.send(IpRequest { ip: ip.to_owned() });
             let service = Rc::clone(&self.service);
             let maxrpm = self.maxrpm;
+
             Box::pin(async move {
                 let (remaining, reset) = res
                     .await
-                    .map_err(|e| actix_web::error::ErrorInternalServerError(e))??;
+                    .map_err(actix_web::error::ErrorInternalServerError)??;
                 if let Some(remaining) = remaining {
                     let mut resp = service.call(req).await?;
                     let headers = resp.headers_mut();

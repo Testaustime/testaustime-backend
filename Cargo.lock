@@ -1511,16 +1511,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "testausratelimiter"
-version = "0.1.0"
-dependencies = [
- "actix",
- "actix-web",
- "futures-util",
- "log",
-]
-
-[[package]]
 name = "testaustime-rs"
 version = "0.3.0"
 dependencies = [
@@ -1545,7 +1535,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "testausratelimiter",
  "thiserror",
  "toml",
  "tracing",

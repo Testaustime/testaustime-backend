@@ -1,10 +1,11 @@
-#![feature(lazy_cell)]
+#![feature(lazy_cell, result_option_inspect, addr_parse_ascii)]
 
 mod api;
 mod auth;
 mod database;
 mod error;
 mod models;
+mod ratelimiter;
 mod requests;
 mod schema;
 mod utils;
@@ -18,18 +19,18 @@ use actix_web::{
     web::{Data, QueryConfig},
     App, HttpMessage, HttpServer,
 };
-use auth::{AuthMiddleware, Authentication};
+use auth::{secured_access::SecuredAccessTokenStorage, AuthMiddleware, Authentication};
 #[cfg(feature = "testausid")]
 use awc::Client;
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
-use database::{Database, DatabaseConnectionPool};
+use database::Database;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
+use ratelimiter::{RateLimiter, RateLimiterStorage};
 use serde_derive::Deserialize;
-use testausratelimiter::{RateLimiter, RateLimiterStorage};
 use tracing::Span;
 use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
 
@@ -47,6 +48,7 @@ extern crate serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct TimeConfig {
+    pub bypass_token: String,
     pub ratelimit_by_peer_ip: bool,
     pub max_requests_per_min: usize,
     pub address: String,
@@ -70,8 +72,6 @@ impl RootSpanBuilder for TestaustimeRootSpanBuilder {
     fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
 }
 
-type DbConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
-
 pub struct RegisterLimiter {
     pub limit_by_peer_ip: bool,
     pub storage: DashMap<String, NaiveDateTime>,
@@ -92,9 +92,7 @@ async fn main() -> std::io::Result<()> {
         .build(manager)
         .expect("Failed to create connection pool");
 
-    let database = Data::new(Database {
-        backend: Box::new(pool) as Box<dyn DatabaseConnectionPool>,
-    });
+    let database = Data::new(Database::new(pool));
 
     let register_limiter = Data::new(RegisterLimiter {
         limit_by_peer_ip: config.ratelimit_by_peer_ip,
@@ -105,6 +103,8 @@ async fn main() -> std::io::Result<()> {
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
+
+    let secured_access_token_storage = Data::new(SecuredAccessTokenStorage::new());
 
     HttpServer::new(move || {
         #[cfg(feature = "testausid")]
@@ -126,6 +126,7 @@ async fn main() -> std::io::Result<()> {
         let app = App::new()
             .app_data(Data::clone(&register_limiter))
             .app_data(query_config)
+            .app_data(Data::clone(&secured_access_token_storage))
             .wrap(cors)
             .service(api::health)
             .service(api::auth::register)
@@ -137,6 +138,7 @@ async fn main() -> std::io::Result<()> {
                         storage: ratelimiter.clone(),
                         use_peer_addr: config.ratelimit_by_peer_ip,
                         maxrpm: config.max_requests_per_min,
+                        bypass_token: config.bypass_token.clone(),
                         reset_interval: 60,
                     })
                     .service({
@@ -150,6 +152,7 @@ async fn main() -> std::io::Result<()> {
                     .service(api::auth::regenerate)
                     .service(api::auth::changeusername)
                     .service(api::auth::changepassword)
+                    .service(api::auth::get_secured_access_token)
                     .service(api::account::change_settings)
                     .service(api::friends::add_friend)
                     .service(api::friends::get_friends)
