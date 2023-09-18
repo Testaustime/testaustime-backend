@@ -24,6 +24,7 @@ Contains various user authorization operations
 | --- | --- | --- |
 | [/auth/register](#register) | POST | Creating a new user and returns the user auth token, friend code and registration time |
 | [/auth/login](#login) | POST | Loging user to system and returns the user auth token and friend code |
+| [/auth/securedaccess](#securedaccess) | POST | Generating secured access token |
 | [/auth/changeusername](#changeusername) | POST | Changing user username |
 | [/auth/changepassword](#changepassword) | POST | Changing user password |
 | [/auth/regenerate](#regenerate)  | POST | Regenerating user auth token |
@@ -72,16 +73,16 @@ curl --request POST https://api.testaustime.fi/auth/register' \
 
 | Response Item | Type | Description |
 | --- | --- | --- |
-| auth_token | string | Bearer Auth token. Using for the all next resquests to identify user |
+| auth_token | string | Authentication token for identifying the user |
 | username | string | Username |
-| friend_code | string | By this code another users can add user to the friend list |
-| registration_time | string (ISO 8601 format) | Time of registration to nanoseconds |
+| friend_code | string | With this code other users can add user to the friend list |
+| registration_time | string | Time of registration in ISO 8601 format |
 </details>
 
 
 #### <a name="login"></a>  [2. POST /auth/login](#auth)
 
-Logins to a users account and returning the auth token
+Logins to a users account and returning the authentication token
 
 <details>
   <summary>Header params</summary>
@@ -127,15 +128,61 @@ curl --request POST 'https://api.testaustime.fi/auth/login' \
 | Response Item | Type | Description |
 | --- | --- | --- |
 | id | int| User id |
-| auth_token | string | Bearer Auth token. Using for the all next resquests to identify user |
-| friend_code | string | By this code another users can add user to the friend list |
+| auth_token | string | Authentication token for identifying the user |
 | username | string | Username |
-| registration_time | string (ISO 8601 format) | Time of registration to microsends |
+| friend_code | string | With this code other users can add user to the friend list |
+| registration_time | string | Time of registration in ISO 8601 format |
 </details>
 
-#### <a name="changeusername"></a>   [3. POST /auth/changeusername](#auth)
+#### <a name="securedaccess"></a>  [3. POST /auth/securedaccess](#auth)
 
-Changes username
+Generates new secured access token, each token is valid for 1 hour. Used for confirming user identity when doing critical changes.
+
+<details>
+  <summary>Header params</summary>
+
+  | Name |  Value |
+| --- | --- |
+| Content-Type | application/json |
+</details>
+
+<details>
+  <summary>Body params</summary>
+
+| Param |  Type | Required | Description |
+| --- | --- | --- | --- |
+| username | string | Yes | Usename has to be between 2 and 32 characters long |
+| password | string | Yes | Password has to be between 8 and 128 characters long |
+</details>
+
+**Sample request**
+```curl
+curl --request POST 'https://api.testaustime.fi/auth/securedaccess' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "username": "username",
+    "password": "password"
+}'
+
+```
+**Sample response**
+```JSON
+{
+    "token": "<token>"
+}
+```
+
+<details>
+  <summary>Response definitions</summary>
+
+| Response Item | Type | Description |
+| --- | --- | --- |
+| token | string | Secured access token |
+</details>
+
+#### <a name="changeusername"></a>   [4. POST /auth/changeusername](#auth)
+
+Changes username, requires secured access token
 
 <details>
   <summary>Header params:</summary>
@@ -143,7 +190,7 @@ Changes username
 | Name |  Value |
 | --- | --- |
 | Content-Type | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -158,7 +205,7 @@ Changes username
 ```curl
 curl --request POST 'https://api.testaustime.fi/auth/changeusername' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token> '{
+--header 'Authorization: Bearer <sec_token> '{
     "new": "new_username"
 }'
 ```
@@ -176,9 +223,9 @@ curl --request POST 'https://api.testaustime.fi/auth/changeusername' \
 | "new" is using existing username| 403 Forbidden | `"error"» : "User exists"` |
 </details>
 
-#### <a name="changepassword"></a>  [4. POST /auth/changepassword](#auth)
+#### <a name="changepassword"></a>  [5. POST /auth/changepassword](#auth)
 
-Changes users password
+Changes users password, requires secured access token
 
 <details>
   <summary>Header params:</summary>
@@ -186,7 +233,7 @@ Changes users password
 | Name |  Value |
 | --- | --- |
 | Content-Type | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -202,7 +249,7 @@ Changes users password
 ```curl
 curl --request POST 'https://api.testaustime.fi/auth/changepassword' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw '{
    "old": "old_password",
    "new": "new_password"
@@ -223,28 +270,29 @@ curl --request POST 'https://api.testaustime.fi/auth/changepassword' \
 | "old" is incorrect| 401 Unathorized | `{"error": "You are not authorized"}` |
 </details>
 
-#### <a name="regenerate"></a>  [5. POST /auth/regenerate](#auth)
+#### <a name="regenerate"></a>  [6. POST /auth/regenerate](#auth)
 
-Regenerates users auth token
+Regenerates users authentication token, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 **Sample request**
 ```curl
 curl --request POST 'https://api.testaustime.fi/auth/regenerate' \
 --header 'Content-Type: application/json'
+--header 'Authorization: Bearer <sec_token>'
 ```
 
 **Sample response**
 ```JSON
 {
-    "token": "<token>"
+    "token": "<auth_token>"
 }
 ```
 
@@ -253,12 +301,12 @@ curl --request POST 'https://api.testaustime.fi/auth/regenerate' \
 
 | Response Item | Type | Description |
 | --- | --- | --- |
-| token | string| New Bearer Auth token. Using for the all next resquests to identify user |
+| token | string | New Authentication token used for identifying user |
 </details>
 
 ## <a name="users"></a>  Users
 
-Containts various mostfully read-operations with user data
+Contains various mostly read-operations with user data
 
 ### Endpoints
 
@@ -280,13 +328,13 @@ Gets data about authorized user
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 **Sample request**
 ```curl
 curl --location --request GET 'https://api.testaustime.fi/users/@me' \
---header 'Authorization: Bearer `<token>`'
+--header 'Authorization: Bearer `<auth_token>`'
 ```
 
 **Sample response**
@@ -303,10 +351,10 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me' \
 
 | Response Item | Type | Description |
 | --- | --- | --- |
-| id | int| User id |
-| friend_code | string | By this code another users can add user to the friend list |
+| id | int | User id |
+| friend_code | string | With this code other users can add user to the friend list |
 | username | string | Username |
-| registration_time | string (ISO 8601 format) | Time of registration to microseconds |
+| registration_time | string | Time of registration in ISO 8601 format |
 </details>
 
 #### <a name="my_leaderboards"></a>  [2. GET /users/@me/leaderboards](#users)
@@ -318,13 +366,13 @@ Gets list of user leaderboards
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 **Sample request**
 ```curl
 curl --location --request GET 'https://api.testaustime.fi/users/@me/leaderboards' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -348,7 +396,7 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me/leaderboards
 
 Required headers:
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <auth_token>
 ```
 
 #### <a name="activity_data"></a>  [3. GET /users/{username}/activity/data](#users)
@@ -360,7 +408,7 @@ Geting user or user friend coding activity data
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -374,7 +422,7 @@ Geting user or user friend coding activity data
 **Sample request**
 ```curl
 curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/data' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -398,12 +446,12 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/dat
 | Response Item | Type | Description |
 | --- | --- | --- |
 | id | int | ID of user code session |
-| start_time | string (ISO 8601 format) | Start time (time of sending first heartbeat) of user code session to microsecnods |
+| start_time | string | Start time (time of sending first heartbeat) of user code session in ISO 8601 format |
 | duration | int | Duration of user code session in seconds |
-| project_name | string| Name of the project in which user have a code session |
-| language | string| Code language of the code session |
-| editor_name | string| Name of IDE (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
-| hostname | string| User hostname |
+| project_name | string | Name of the project in which user have a code session |
+| language | string | Code language of the code session |
+| editor_name | string | Name of IDE (Visual Studio Code, IntelliJ, Neovim, etc.) in which user is coding |
+| hostname | string | User hostname |
 </details>
 
 #### <a name="activity_summary"></a>  [4. GET /users/{username}/activity/summary](#users)
@@ -415,7 +463,7 @@ Get a summary of a users activity
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -429,7 +477,7 @@ Get a summary of a users activity
 **Sample request**
 ```curl
 curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/summary' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -462,13 +510,13 @@ curl --location --request GET 'https://api.testaustime.fi/users/@me/activity/sum
 <details>
   <summary>Response definitions:</summary>
 
-| Response Item | Type                     | Description                                                                       |
-| ---           | ---                      | ---                                                                               |
-| all_time      | Object                   | All time coding activity summary for the user                                     |
-| languages     | Object                   | Contains fields named after languages that have the coding time as thier value    |
-| total         | int                      | The total coding time of the given period                                         |
-| last_month    | Object                   | Similar to `all_time`                                                             |
-| last_week     | Object                   | Similar to `all_time` and `last_month`                                            |
+| Response Item | Type       | Description                                                                       |
+| ---           | ---        | ---                                                                               |
+| all_time      | Object     | All time coding activity summary for the user                                     |
+| languages     | Object     | Contains fields named after languages that have the coding time as their value    |
+| total         | int        | The total coding time of the given period                                         |
+| last_month    | Object     | Similar to `all_time`                                                             |
+| last_week     | Object     | Similar to `all_time` and `last_month`                                            |
 </details>
 
 #### <a name="activity_cur"></a>  [5. GET /users/{username}/activity/current](#users)
@@ -480,7 +528,7 @@ Gets details of the ongoing coding session if there is one.
 
 | Name          | Value            |
 | ---           | ---              |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -494,7 +542,7 @@ Gets details of the ongoing coding session if there is one.
 **Sample request**
 ```curl
 curl --request GET 'https://api.testaustime.fi/users/@me/activity/current' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -514,11 +562,11 @@ curl --request GET 'https://api.testaustime.fi/users/@me/activity/current' \
 <details>
   <summary>Response definitions:</summary>
 
-| Response Item | Type                     | Description                                                                       |
-| ---           | ---                      | ---                                                                               |
-| started       | string (ISO 8601 format) | Start time (time of sending first heartbeat) of user code session to microsecnods |
-| duration      | int                      | Duration of user code session in seconds                                          |
-| heartbeat     | Object                   | The HeartBeat object described [here](#activity_up)                               |
+| Response Item | Type   | Description                                                                          |
+| ---           | ---    | ---                                                                                  |
+| started       | string | Start time (time of sending first heartbeat) of user code session in ISO 8601 format |
+| duration      | int    | Duration of user code session in seconds                                             |
+| heartbeat     | Object | The HeartBeat object described [here](#activity_up)                                  |
 </details>
 
 #### <a name="delete_myself"></a>  [6. DELETE /users/@me/delete](#users)
@@ -581,7 +629,7 @@ Main endpoint of the service. Creates code session and logs current activity in 
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 | Content-Type | application/json |
 </details>
 
@@ -602,7 +650,7 @@ If the user doesn't have any active code session with this set of body params, t
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/activity/update' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "language": "Python",
@@ -621,7 +669,7 @@ curl --request POST 'https://api.testaustime.fi/activity/update' \
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/activity/update' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "language": "Python",
@@ -648,13 +696,13 @@ Flushes/stops any currently active coding session
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 **Sample request**
 ```curl
 curl --request POST 'https://api.testaustime.fi/activity/flush' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -672,7 +720,7 @@ Rename all activities that have a matching `project_name`
 | Name          | Value            |
 | ---           | ---              |
 | Content-Type  | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -688,7 +736,7 @@ Rename all activities that have a matching `project_name`
 ```curl
 curl --request POST 'https://api.testaustime.fi/activity/rename' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --data-raw '{
     "from": "old_name",
     "to": "new_name"
@@ -711,14 +759,14 @@ curl --request POST 'https://api.testaustime.fi/activity/rename' \
 
 #### <a name="activity_del"></a>  [4. POST /activity/delete](#activity)
 
-Deletes selected code session
+Deletes selected code session, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -732,7 +780,7 @@ Deletes selected code session
 **Sample request**
 ```curl
 curl --request DELETE 'https://api.testaustime.fi/activity/delete' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw 'activity_id'
 ```
 
@@ -763,7 +811,7 @@ Adds the holder of the friend token as a friend of the authenticating user
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -778,7 +826,7 @@ Adds the holder of the friend token as a friend of the authenticating user
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/friends/add' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --data-raw 'friend_code'
 ```
 
@@ -812,7 +860,7 @@ curl --request POST 'https://api.testaustime.fi/friends/add' \
 | --- | --- | --- |
 | Friendcode is already used for adding a friend | 403 Forbidden | { "error": "Already friends"} |
 | Friendcode from body request is not found | 404 Not Found | { "error": "User not found"} |
-| Friendcode matches with friendcode of authorized user himself the n 403 Forbidden | 403 Forbidden | { "error": "You cannot add yourself"} |
+| Friendcode matches with friendcode of authorized user themself | 403 Forbidden | { "error": "You cannot add yourself"} |
 </details>
 
 #### <a name="list_friends"></a>  [2. GET friends/list](#friends)
@@ -824,14 +872,14 @@ Gets a list of added user friends
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 **Sample request**
 
 ```curl
 curl --request GET ''https://api.testaustime.fi/friends/list' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -880,20 +928,20 @@ curl --request GET ''https://api.testaustime.fi/friends/list' \
 
 #### <a name="regenerate_fc"></a>  [3. POST /friends/regenerate](#friends)
 
-Regenerates the authorized user's friend code
+Regenerates the authorized user's friend code, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 **Sample request**
 ```curl
 curl --request POST 'https://api.testaustime.fi/friends/regenerate' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <sec_token>'
 ```
 
 **Sample response**
@@ -913,14 +961,14 @@ curl --request POST 'https://api.testaustime.fi/friends/regenerate' \
 
 #### <a name="remove_friend"></a>  [4. DELETE /friends/remove](#friends)
 
-Removes another user from your friend list
+Removes another user from your friend list, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -934,7 +982,7 @@ Removes another user from your friend list
 **Sample request**
 ```curl
 curl --request DELETE 'https://api.testaustime.fi/friends/remove' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw 'username'
 ```
 
@@ -970,7 +1018,7 @@ Adds new leaderboard
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 | Content-Type | application/json |
 </details>
 
@@ -985,7 +1033,7 @@ Adds new leaderboard
 **Sample request**
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/create' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "name": "<name>"
@@ -1023,7 +1071,7 @@ Joins leaderboard by it's invite code
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 | Content-Type | application/json |
 </details>
 
@@ -1039,7 +1087,7 @@ Joins leaderboard by it's invite code
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/join' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <auth_token>' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "invite": "invite_code"
@@ -1082,7 +1130,7 @@ Gets info about leaderboard if authorized user is a member
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<auth_token>` |
 </details>
 
 <details>
@@ -1097,7 +1145,7 @@ Gets info about leaderboard if authorized user is a member
 
 ```curl
 curl --request GET 'https://api.testaustime.fi/leaderboards/{name}' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <auth_token>'
 ```
 
 **Sample response**
@@ -1140,7 +1188,7 @@ curl --request GET 'https://api.testaustime.fi/leaderboards/{name}' \
 
 #### <a name="delete_lb"></a>  [4. DELETE /leaderboard/{name}](#leaderboards)
 
-Deletes leaderboard if authorized user has admin rights
+Deletes leaderboard if authorized user has admin rights, requires secured access token
 
 >*Note: Leaderboard can be deleted either by root administrator or by promoted one*
 
@@ -1149,7 +1197,7 @@ Deletes leaderboard if authorized user has admin rights
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1164,7 +1212,7 @@ Deletes leaderboard if authorized user has admin rights
 
 ```curl
 curl --request DELETE 'https://api.testaustime.fi/leaderboards/{name}' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <sec_token>'
 ```
 
 **Sample response**
@@ -1183,14 +1231,14 @@ curl --request DELETE 'https://api.testaustime.fi/leaderboards/{name}' \
 
 #### <a name="leave_lb"></a>  [5. POST /leaderboards/{name}/leave](#leaderboards)
 
-Leaves the leaderboard
+Leaves the leaderboard, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1205,7 +1253,7 @@ Leaves the leaderboard
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/leave' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <sec_token>'
 ```
 
 **Sample response**
@@ -1225,14 +1273,14 @@ curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/leave' \
 
 #### <a name="promote_lb"></a>  [6. POST /leaderboards/{name}/regenerate](#leaderboards)
 
-Regenerates invite code of the leaderboard if authorized user has admin rights
+Regenerates invite code of the leaderboard if authorized user has admin rights, requires secured access token
 
 <details>
   <summary>Header params:</summary>
 
 | Name |  Value |
 | --- | --- |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1247,7 +1295,7 @@ Regenerates invite code of the leaderboard if authorized user has admin rights
 
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/regenerate' \
---header 'Authorization: Bearer <token>'
+--header 'Authorization: Bearer <sec_token>'
 ```
 
 **Sample response**
@@ -1267,7 +1315,7 @@ curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/regenerate' 
 
 #### <a name="regenerate_lb"></a>  [7. POST /leaderboards/{name}/promote](#leaderboards)
 
-Promotes member of a leaderboard to admin if authorized user has admin rights. Be careful of promoting users, root admin (creator of the leaderboard) can be demoted/kicked as a promoted one
+Promotes member of a leaderboard to admin if authorized user has admin rights. Be careful of promoting users, root admin (creator of the leaderboard) can be demoted/kicked by a promoted one. Requires secured access token.
 
 >*This request is idempotent, it means that you can:
 >1. *Promote user that is already admin and have in response 200 OK*
@@ -1279,7 +1327,7 @@ Promotes member of a leaderboard to admin if authorized user has admin rights. B
 | Name |  Value |
 | --- | --- |
 | Content-Type | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1303,7 +1351,7 @@ Promotes member of a leaderboard to admin if authorized user has admin rights. B
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/promote' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw '{
     "user": "<user>"
 }'
@@ -1325,7 +1373,7 @@ curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/promote' \
 
 #### <a name="demote_lb"></a>  [8. POST /leaderboards/{name}/demote](#leaderboards)
 
-Demotes admin to regular member in the leaderboard if authorized user has admin rights. Be careful of promoting users, root admin (creator of the leaderboard) can be demoted as a promoted one
+Demotes admin to regular member in the leaderboard if authorized user has admin rights. Be careful of promoting users, root admin (creator of the leaderboard) can be demoted by a promoted one. Requires secured access token.
 
 <details>
   <summary>Header params:</summary>
@@ -1333,7 +1381,7 @@ Demotes admin to regular member in the leaderboard if authorized user has admin 
 | Name |  Value |
 | --- | --- |
 | Content-Type | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1357,7 +1405,7 @@ Demotes admin to regular member in the leaderboard if authorized user has admin 
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/demote' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw '{
     "user": "<user>"
 }'
@@ -1380,7 +1428,7 @@ curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/demote' \
 
 #### <a name="kick_lb"></a>  [9. POST /leaderboards/{name}/kick](#leaderboards)
 
-Kicks user from leaderboard if authorized user has admin rights
+Kicks user from leaderboard if authorized user has admin rights, requires secured access token
 
 <details>
   <summary>Header params:</summary>
@@ -1388,7 +1436,7 @@ Kicks user from leaderboard if authorized user has admin rights
 | Name |  Value |
 | --- | --- |
 | Content-Type | application/json |
-| Authorization | Bearer `<token>` |
+| Authorization | Bearer `<sec_token>` |
 </details>
 
 <details>
@@ -1412,7 +1460,7 @@ Kicks user from leaderboard if authorized user has admin rights
 ```curl
 curl --request POST 'https://api.testaustime.fi/leaderboards/{name}/kick' \
 --header 'Content-Type: application/json' \
---header 'Authorization: Bearer <token>' \
+--header 'Authorization: Bearer <sec_token>' \
 --data-raw '{
     "user": "<user>"
 }'
