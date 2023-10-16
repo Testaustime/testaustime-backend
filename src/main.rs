@@ -10,7 +10,8 @@ mod requests;
 mod schema;
 mod utils;
 
-use actix::Actor;
+use std::{num::NonZeroU32, sync::Arc};
+
 use actix_cors::Cors;
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
@@ -29,7 +30,8 @@ use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
-use ratelimiter::{RateLimiter, RateLimiterStorage};
+use governor::{Quota, RateLimiter};
+use ratelimiter::TestaustimeRateLimiter;
 use serde_derive::Deserialize;
 use tracing::Span;
 use tracing_actix_web::{root_span, RootSpanBuilder, TracingLogger};
@@ -99,7 +101,12 @@ async fn main() -> std::io::Result<()> {
         storage: DashMap::new(),
     });
 
-    let ratelimiter = RateLimiterStorage::new(config.max_requests_per_min, 60).start();
+    let ratelimiter = Arc::new(
+        RateLimiter::keyed(Quota::per_minute(
+            NonZeroU32::new(config.max_requests_per_min as u32).unwrap(),
+        ))
+        .with_middleware(),
+    );
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
     let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
@@ -134,12 +141,10 @@ async fn main() -> std::io::Result<()> {
                 let scope = web::scope("")
                     .wrap(tracing)
                     .wrap(AuthMiddleware)
-                    .wrap(RateLimiter {
-                        storage: ratelimiter.clone(),
+                    .wrap(TestaustimeRateLimiter {
+                        limiter: Arc::clone(&ratelimiter),
                         use_peer_addr: config.ratelimit_by_peer_ip,
-                        maxrpm: config.max_requests_per_min,
                         bypass_token: config.bypass_token.clone(),
-                        reset_interval: 60,
                     })
                     .service({
                         web::scope("/activity")

@@ -14,7 +14,6 @@ lto = true
 
 [dependencies]
 actix-web = { version = "4.2.1", features = ["macros", "rustls"] }
-actix = "0.13"
 awc = { version = "3.0.0", features = ["rustls"], optional = true }
 actix-cors = "0.6"
 http = "0.2"
@@ -45,3 +44,4 @@ dotenv = "0.15"
 url = "2.2"
 
 itertools = "0.10.3"
+governor = "0.6.0"
