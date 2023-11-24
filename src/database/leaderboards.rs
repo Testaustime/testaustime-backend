@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use chrono::prelude::*;
 use diesel::{insert_into, prelude::*};
 
-use crate::{error::TimeError, models::*};
+use crate::{api::users::ListLeaderboard, error::TimeError, models::*};
 
 impl super::DatabaseWrapper {
     pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
@@ -135,6 +137,7 @@ impl super::DatabaseWrapper {
         for m in members {
             if let Ok(user) = self.get_user_by_id(m.user_id).await {
                 fullmembers.push(PrivateLeaderboardMember {
+                    id: m.id,
                     username: user.username,
                     admin: m.admin,
                     time_coded: self
@@ -156,7 +159,7 @@ impl super::DatabaseWrapper {
         &self,
         uid: i32,
         invite: String,
-    ) -> Result<crate::api::users::ListLeaderboard, TimeError> {
+    ) -> Result<crate::api::users::MinimalLeaderboard, TimeError> {
         let (lid, name) = self
             .run_async_query(move |mut conn| {
                 use crate::schema::leaderboards::dsl::*;
@@ -191,7 +194,7 @@ impl super::DatabaseWrapper {
             })
             .await?;
 
-        Ok(crate::api::users::ListLeaderboard { name, member_count })
+        Ok(crate::api::users::MinimalLeaderboard { name, member_count })
     }
 
     pub async fn remove_user_from_leaderboard(
@@ -301,38 +304,69 @@ impl super::DatabaseWrapper {
             })
             .await?;
 
-        let (names, memcount) = self
+        let members = self
             .run_async_query(move |mut conn| {
-                let n = {
-                    use crate::schema::leaderboards::dsl::*;
-                    leaderboards
-                        .filter(id.eq_any(&ids))
-                        .order_by(id.asc())
-                        .select(name)
-                        .load::<String>(&mut conn)?
-                };
-                let mut c = Vec::new();
-                // FIXME: Do this in the query
-                for i in ids {
-                    c.push({
+                use crate::schema::leaderboards::dsl::*;
+                let ls = leaderboards
+                    .filter(id.eq_any(&ids))
+                    .order_by(id.asc())
+                    .load::<Leaderboard>(&mut conn)?;
+
+                let mut members: HashMap<Leaderboard, Vec<LeaderboardMember>> = HashMap::new();
+                for l in &ls {
+                    members.insert(l.clone(), {
                         use crate::schema::leaderboard_members::dsl::*;
                         leaderboard_members
-                            .filter(leaderboard_id.eq(i))
-                            .select(diesel::dsl::count(user_id))
-                            .first::<i64>(&mut conn)? as i32
-                    })
+                            .filter(leaderboard_id.eq(l.id))
+                            .load::<LeaderboardMember>(&mut conn)?
+                    });
                 }
 
-                Ok((n, c))
+                Ok(members)
             })
             .await?;
-        let mut ret = Vec::new();
-        for (n, c) in names.iter().zip(memcount) {
-            ret.push(crate::api::users::ListLeaderboard {
-                name: n.to_string(),
-                member_count: c,
-            });
+
+        let aweekago = NaiveDateTime::new(
+            chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
+            chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
+        );
+
+        // FIXME: cache members
+        let mut fullmembers = HashMap::new();
+        for (l, ms) in members {
+            let mut full = Vec::new();
+            for m in ms {
+                if let Ok(user) = self.get_user_by_id(m.user_id).await {
+                    full.push(PrivateLeaderboardMember {
+                        id: m.id,
+                        username: user.username,
+                        admin: m.admin,
+                        time_coded: self
+                            .get_user_coding_time_since(m.user_id, aweekago)
+                            .await
+                            .unwrap_or(0),
+                    });
+                }
+            }
+            fullmembers.insert(l, full);
         }
+
+        let mut ret = Vec::new();
+        for (l, mut ms) in fullmembers {
+            ms.sort_by_key(|m| m.time_coded);
+            // NOTE: Leaderboards can't be empty here as they have to contain user
+            let mypos = ms.iter().position(|m| m.id == uid).unwrap();
+            let me = ms.get(mypos).unwrap();
+            let top = ms.last().unwrap();
+            ret.push(ListLeaderboard {
+                name: l.name,
+                me: me.clone(),
+                my_position: (mypos + 1) as i32,
+                member_count: ms.len() as i32,
+                top_member: top.clone(),
+            })
+        }
+
         Ok(ret)
     }
 }
