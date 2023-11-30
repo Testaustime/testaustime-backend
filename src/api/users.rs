@@ -10,7 +10,7 @@ use crate::{
     api::{activity::HeartBeatMemoryStore, auth::UserIdentityOptional},
     database::DatabaseWrapper,
     error::TimeError,
-    models::{CurrentActivity, UserId, UserIdentity},
+    models::{CurrentActivity, PrivateLeaderboardMember, UserId, UserIdentity},
     requests::DataRequest,
     utils::group_by_language,
 };
@@ -28,6 +28,15 @@ pub async fn my_profile(user: UserIdentity) -> Result<impl Responder, TimeError>
 
 #[derive(serde::Serialize)]
 pub struct ListLeaderboard {
+    pub name: String,
+    pub member_count: i32,
+    pub top_member: PrivateLeaderboardMember,
+    pub my_position: i32,
+    pub me: PrivateLeaderboardMember,
+}
+
+#[derive(serde::Serialize)]
+pub struct MinimalLeaderboard {
     pub name: String,
     pub member_count: i32,
 }

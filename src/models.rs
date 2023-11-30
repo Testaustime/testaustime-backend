@@ -156,7 +156,7 @@ pub struct NewCodingActivity {
     pub hostname: Option<String>,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize)]
+#[derive(Queryable, Clone, Debug, Serialize, Hash, Eq, PartialEq)]
 pub struct Leaderboard {
     pub id: i32,
     pub name: String,
@@ -194,6 +194,7 @@ pub struct NewLeaderboardMember {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct PrivateLeaderboardMember {
+    pub id: i32,
     pub username: String,
     pub admin: bool,
     pub time_coded: i32,
