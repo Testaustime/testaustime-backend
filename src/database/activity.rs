@@ -19,6 +19,7 @@ impl super::DatabaseWrapper {
             user_id: updated_user_id,
             start_time: ctx_start_time,
             duration: ctx_duration.num_seconds() as i32,
+            // FIXME: wtf why is this done in the database?
             project_name: if heartbeat.project_name.is_some()
                 && heartbeat.project_name.as_ref().unwrap().starts_with("tmp.")
             {
@@ -143,5 +144,20 @@ impl super::DatabaseWrapper {
                 .execute(&mut conn)?)
         })
         .await
+    }
+
+    pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
+        use crate::schema::coding_activities::dsl::*;
+
+        let res = self
+            .run_async_query(move |mut conn| {
+                Ok(diesel::delete(coding_activities.find(activity))
+                    // FIXME: This filter is useless?
+                    .filter(user_id.eq(userid))
+                    .execute(&mut conn)?)
+            })
+            .await?;
+
+        Ok(res != 0)
     }
 }

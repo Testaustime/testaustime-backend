@@ -74,7 +74,7 @@ impl super::DatabaseWrapper {
                     )
                     .filter_map(|cur_friend| {
                         user_identities
-                            .filter(id.eq(cur_friend))
+                            .find(cur_friend)
                             .first::<UserIdentity>(&mut conn)
                             .ok()
                     })
@@ -112,7 +112,7 @@ impl super::DatabaseWrapper {
             let opt_friends = self
                 .run_async_query(move |mut conn| {
                     Ok(user_identities
-                        .filter(id.eq(cur_friend))
+                        .find(cur_friend)
                         .first::<UserIdentity>(&mut conn)
                         .ok())
                 })
@@ -177,8 +177,7 @@ impl super::DatabaseWrapper {
         let code_clone = code.clone();
 
         self.run_async_query(move |mut conn| {
-            diesel::update(crate::schema::user_identities::table)
-                .filter(id.eq(userid))
+            diesel::update(user_identities.find(userid))
                 .set(friend_code.eq(code_clone))
                 .execute(&mut conn)?;
 

@@ -39,7 +39,7 @@ impl super::DatabaseWrapper {
         use crate::schema::user_identities::dsl::*;
 
         self.run_async_query(move |mut conn| {
-            Ok(diesel::delete(user_identities.filter(id.eq(userid))).execute(&mut conn)? > 0)
+            Ok(diesel::delete(user_identities.find(userid)).execute(&mut conn)? > 0)
         })
         .await
     }
@@ -49,12 +49,13 @@ impl super::DatabaseWrapper {
 
         self.run_async_query(move |mut conn| {
             Ok(user_identities
-                .filter(id.eq(userid))
+                .find(userid)
                 .first::<UserIdentity>(&mut conn)?)
         })
         .await
     }
 
+    // TODO: get rid of unwraps
     pub async fn verify_user_password(
         &self,
         username: &str,
@@ -83,8 +84,7 @@ impl super::DatabaseWrapper {
         self.run_async_query(move |mut conn| {
             use crate::schema::user_identities::dsl::*;
 
-            diesel::update(crate::schema::user_identities::table)
-                .filter(id.eq(userid))
+            diesel::update(user_identities.find(userid))
                 .set(auth_token.eq(token_clone))
                 .execute(&mut conn)?;
 
@@ -238,7 +238,7 @@ impl super::DatabaseWrapper {
             let token = self
                 .run_async_query(move |mut conn| {
                     Ok(user_identities
-                        .filter(id.eq(user_identity))
+                        .find(user_identity)
                         .select(auth_token)
                         .first::<String>(&mut conn)?)
                 })
@@ -286,7 +286,7 @@ impl super::DatabaseWrapper {
     pub async fn change_visibility(&self, userid: i32, visibility: bool) -> Result<(), TimeError> {
         self.run_async_query(move |mut conn| {
             use crate::schema::user_identities::dsl::*;
-            diesel::update(user_identities.filter(id.eq(userid)))
+            diesel::update(user_identities.find(userid))
                 .set(is_public.eq(visibility))
                 .execute(&mut conn)?;
             Ok(())

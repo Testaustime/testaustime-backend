@@ -3,24 +3,11 @@ use std::collections::HashMap;
 use chrono::prelude::*;
 use diesel::{insert_into, prelude::*};
 
-use crate::{api::users::ListLeaderboard, error::TimeError, models::*};
+use crate::{
+    api::users::ListLeaderboard, error::TimeError, models::*, schema::leaderboard_members,
+};
 
 impl super::DatabaseWrapper {
-    pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
-        use crate::schema::coding_activities::dsl::*;
-
-        let res = self
-            .run_async_query(move |mut conn| {
-                Ok(diesel::delete(crate::schema::coding_activities::table)
-                    .filter(id.eq(activity))
-                    .filter(user_id.eq(userid))
-                    .execute(&mut conn)?)
-            })
-            .await?;
-
-        Ok(res != 0)
-    }
-
     pub async fn create_leaderboard(
         &self,
         creator_id: i32,
@@ -69,8 +56,7 @@ impl super::DatabaseWrapper {
 
         self.run_async_query(move |mut conn| {
             use crate::schema::leaderboards::dsl::*;
-            diesel::update(crate::schema::leaderboards::table)
-                .filter(id.eq(lid))
+            diesel::update(leaderboards.find(lid))
                 .set(invite_code.eq(newinvite_clone))
                 .execute(&mut conn)?;
             Ok(())
@@ -133,6 +119,25 @@ impl super::DatabaseWrapper {
             chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
             chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
         );
+
+        //let ms = {
+        //    let board_clone = board.clone();
+        //    self.run_async_query(move |mut conn| {
+        //        Ok(LeaderboardMember::belonging_to(&board_clone)
+        //            .inner_join(crate::schema::user_identities::table)
+        //            .load::<(LeaderboardMember, UserIdentity)>(&mut conn)?
+        //            .map(|(m, u)| PrivateLeaderboardMember {
+        //                id: m.id,
+        //                username: u.username,
+        //                admin: m.admin,
+        //                time_coded: self
+        //                    .get_user_coding_time_since(m.user_id, aweekago)
+        //                    .await
+        //                    .unwrap_or(0),
+        //            }))
+        //    })
+        //    .await?
+        //};
 
         for m in members {
             if let Ok(user) = self.get_user_by_id(m.user_id).await {
