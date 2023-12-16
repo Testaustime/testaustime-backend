@@ -6,7 +6,7 @@ pub struct UserId {
     pub id: i32,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize, PartialEq, Eq, Identifiable)]
+#[derive(Identifiable, Queryable, Clone, Debug, Serialize, PartialEq, Eq)]
 #[diesel(table_name = user_identities)]
 pub struct UserIdentity {
     pub id: i32,

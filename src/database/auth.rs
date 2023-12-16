@@ -3,56 +3,55 @@ use argon2::{
     Argon2,
 };
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
 use crate::{error::TimeError, models::*, utils::*};
 
 impl super::DatabaseWrapper {
     pub async fn user_exists(&self, target_username: String) -> Result<bool, TimeError> {
+        let mut conn = self.db.get().await?;
         use crate::schema::user_identities::dsl::*;
 
-        self.run_async_query(move |mut conn| {
-            Ok(user_identities
-                .filter(username.eq(target_username))
-                .first::<UserIdentity>(&mut conn)
-                .optional()?
-                .is_some())
-        })
-        .await
+        Ok(user_identities
+            .filter(username.eq(target_username))
+            .first::<UserIdentity>(&mut conn)
+            .await
+            .optional()?
+            .is_some())
     }
 
     pub async fn get_user_by_name(
         &self,
         target_username: String,
     ) -> Result<UserIdentity, TimeError> {
+        let mut conn = self.db.get().await?;
         use crate::schema::user_identities::dsl::*;
         sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
 
-        self.run_async_query(move |mut conn| {
-            Ok(user_identities
-                .filter(lower(username).eq(target_username.to_lowercase()))
-                .first::<UserIdentity>(&mut conn)?)
-        })
-        .await
+        Ok(user_identities
+            .filter(lower(username).eq(target_username.to_lowercase()))
+            .first::<UserIdentity>(&mut conn)
+            .await?)
     }
 
     pub async fn delete_user(&self, userid: i32) -> Result<bool, TimeError> {
+        let mut conn = self.db.get().await?;
         use crate::schema::user_identities::dsl::*;
 
-        self.run_async_query(move |mut conn| {
-            Ok(diesel::delete(user_identities.find(userid)).execute(&mut conn)? > 0)
-        })
-        .await
+        Ok(diesel::delete(user_identities.find(userid))
+            .execute(&mut conn)
+            .await?
+            > 0)
     }
 
     pub async fn get_user_by_id(&self, userid: i32) -> Result<UserIdentity, TimeError> {
+        let mut conn = self.db.get().await?;
         use crate::schema::user_identities::dsl::*;
 
-        self.run_async_query(move |mut conn| {
-            Ok(user_identities
-                .find(userid)
-                .first::<UserIdentity>(&mut conn)?)
-        })
-        .await
+        Ok(user_identities
+            .find(userid)
+            .first::<UserIdentity>(&mut conn)
+            .await?)
     }
 
     // TODO: get rid of unwraps
@@ -61,6 +60,7 @@ impl super::DatabaseWrapper {
         username: &str,
         password: &str,
     ) -> Result<Option<UserIdentity>, TimeError> {
+        // FIXME: Use JOIN here
         let user = self.get_user_by_name(username.to_string()).await?;
         let tuser = self.get_testaustime_user_by_id(user.id).await?;
 
@@ -77,20 +77,18 @@ impl super::DatabaseWrapper {
     }
 
     pub async fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {
+        let mut conn = self.db.get().await?;
+
         let token = crate::utils::generate_token();
 
         let token_clone = token.clone();
 
-        self.run_async_query(move |mut conn| {
-            use crate::schema::user_identities::dsl::*;
+        use crate::schema::user_identities::dsl::*;
 
-            diesel::update(user_identities.find(userid))
-                .set(auth_token.eq(token_clone))
-                .execute(&mut conn)?;
-
-            Ok(())
-        })
-        .await?;
+        diesel::update(user_identities.find(userid))
+            .set(auth_token.eq(token_clone))
+            .execute(&mut conn)
+            .await?;
 
         Ok(token)
     }
@@ -118,45 +116,54 @@ impl super::DatabaseWrapper {
 
         let new_user_clone = new_user.clone();
 
-        self.run_async_query(move |mut conn| {
-            let id = diesel::insert_into(crate::schema::user_identities::table)
-                .values(new_user_clone)
-                .returning(user_identities::id)
-                .get_results::<i32>(&mut conn)
-                .map_err(|_| TimeError::UserExists)?;
+        let mut conn = self.db.get().await?;
 
-            let testaustime_user = NewTestaustimeUser {
-                password: hash.as_bytes().to_vec(),
-                salt: salt.as_bytes().to_vec(),
-                identity: id[0],
-            };
+        conn.build_transaction()
+            .read_write()
+            .deferrable()
+            .run(|mut conn| {
+                Box::pin(async move {
+                    let id = diesel::insert_into(crate::schema::user_identities::table)
+                        .values(new_user_clone)
+                        .returning(user_identities::id)
+                        .get_results::<i32>(&mut conn)
+                        .await
+                        .map_err(|_| TimeError::UserExists)?;
 
-            diesel::insert_into(testaustime_users::table)
-                .values(&testaustime_user)
-                .execute(&mut conn)?;
+                    let testaustime_user = NewTestaustimeUser {
+                        password: hash.as_bytes().to_vec(),
+                        salt: salt.as_bytes().to_vec(),
+                        identity: id[0],
+                    };
 
-            Ok(())
-        })
-        .await?;
+                    diesel::insert_into(testaustime_users::table)
+                        .values(&testaustime_user)
+                        .execute(&mut conn)
+                        .await?;
+
+                    Ok::<(), TimeError>(())
+                }) as _
+            })
+            .await?;
 
         Ok(new_user)
     }
 
+    // FIXME: This could be done in a single transaction
     pub async fn change_username(&self, user: i32, new_username: String) -> Result<(), TimeError> {
         if self.user_exists(new_username.to_string()).await? {
             return Err(TimeError::UserExists);
         }
 
-        self.run_async_query(move |mut conn| {
-            use crate::schema::user_identities::dsl::*;
-            diesel::update(crate::schema::user_identities::table)
-                .filter(id.eq(user))
-                .set(username.eq(new_username))
-                .execute(&mut conn)
-                .map_err(|_| TimeError::UserExists)?;
-            Ok(())
-        })
-        .await?;
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::user_identities::dsl::*;
+        diesel::update(crate::schema::user_identities::table)
+            .filter(id.eq(user))
+            .set(username.eq(new_username))
+            .execute(&mut conn)
+            .await
+            .map_err(|_| TimeError::UserExists)?;
 
         Ok(())
     }
@@ -169,47 +176,46 @@ impl super::DatabaseWrapper {
             .unwrap();
         let new_hash = password_hash.hash.unwrap();
 
-        self.run_async_query(move |mut conn| {
-            use crate::schema::testaustime_users::dsl::*;
-            diesel::update(crate::schema::testaustime_users::table)
-                .filter(identity.eq(user))
-                .set((
-                    password.eq(&new_hash.as_bytes()),
-                    salt.eq(new_salt.as_bytes()),
-                ))
-                .execute(&mut conn)?;
-            Ok(())
-        })
-        .await?;
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::testaustime_users::dsl::*;
+        diesel::update(crate::schema::testaustime_users::table)
+            .filter(identity.eq(user))
+            .set((
+                password.eq(&new_hash.as_bytes()),
+                salt.eq(new_salt.as_bytes()),
+            ))
+            .execute(&mut conn)
+            .await?;
 
         Ok(())
     }
 
     pub async fn get_user_by_token(&self, token: String) -> Result<UserIdentity, TimeError> {
-        let user = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::user_identities::dsl::*;
+        let mut conn = self.db.get().await?;
+        let user = {
+            use crate::schema::user_identities::dsl::*;
 
-                Ok(user_identities
-                    .filter(auth_token.eq(token))
-                    .first::<UserIdentity>(&mut conn)?)
-            })
-            .await?;
+            user_identities
+                .filter(auth_token.eq(token))
+                .first::<UserIdentity>(&mut conn)
+                .await?
+        };
 
         Ok(user)
     }
 
     pub async fn get_testaustime_user_by_id(&self, uid: i32) -> Result<TestaustimeUser, TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::testaustime_users::dsl::*;
+        use crate::schema::testaustime_users::dsl::*;
+        let mut conn = self.db.get().await?;
 
-            Ok(testaustime_users
-                .filter(identity.eq(uid))
-                .first::<TestaustimeUser>(&mut conn)?)
-        })
-        .await
+        Ok(testaustime_users
+            .filter(identity.eq(uid))
+            .first::<TestaustimeUser>(&mut conn)
+            .await?)
     }
 
+    // FIXME: Use transactions
     #[cfg(feature = "testausid")]
     pub async fn testausid_login(
         &self,
@@ -224,24 +230,20 @@ impl super::DatabaseWrapper {
 
         let user_id_arg_clone = user_id_arg.clone();
 
-        let user_identity_opt = self
-            .run_async_query(move |mut conn| {
-                Ok(testausid_users
-                    .filter(user_id.eq(user_id_arg_clone))
-                    .select(identity)
-                    .first::<i32>(&mut conn)
-                    .optional()?)
-            })
-            .await?;
+        let mut conn = self.db.get().await?;
+
+        let user_identity_opt = testausid_users
+            .filter(user_id.eq(user_id_arg_clone))
+            .select(identity)
+            .first::<i32>(&mut conn)
+            .await
+            .optional()?;
 
         if let Some(user_identity) = user_identity_opt {
-            let token = self
-                .run_async_query(move |mut conn| {
-                    Ok(user_identities
-                        .find(user_identity)
-                        .select(auth_token)
-                        .first::<String>(&mut conn)?)
-                })
+            let token = user_identities
+                .find(user_identity)
+                .select(auth_token)
+                .first::<String>(&mut conn)
                 .await?;
 
             Ok(token)
@@ -254,15 +256,12 @@ impl super::DatabaseWrapper {
                 username,
                 friend_code: generate_friend_code(),
             };
-            let new_user_id = self
-                .run_async_query(move |mut conn| {
-                    diesel::insert_into(crate::schema::user_identities::table)
-                        .values(&new_user)
-                        .returning(id)
-                        .get_results::<i32>(&mut conn)
-                        .map_err(|_| TimeError::UserExists)
-                })
-                .await?;
+            let new_user_id = diesel::insert_into(crate::schema::user_identities::table)
+                .values(&new_user)
+                .returning(id)
+                .get_results::<i32>(&mut conn)
+                .await
+                .map_err(|_| TimeError::UserExists)?;
 
             let testausid_user = NewTestausIdUser {
                 user_id: user_id_arg,
@@ -270,27 +269,23 @@ impl super::DatabaseWrapper {
                 service_id: platform_id,
             };
 
-            self.run_async_query(move |mut conn| {
-                diesel::insert_into(testausid_users)
-                    .values(&testausid_user)
-                    .execute(&mut conn)?;
-
-                Ok(())
-            })
-            .await?;
+            diesel::insert_into(testausid_users)
+                .values(&testausid_user)
+                .execute(&mut conn)
+                .await?;
 
             Ok(token)
         }
     }
 
     pub async fn change_visibility(&self, userid: i32, visibility: bool) -> Result<(), TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::user_identities::dsl::*;
-            diesel::update(user_identities.find(userid))
-                .set(is_public.eq(visibility))
-                .execute(&mut conn)?;
-            Ok(())
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::user_identities::dsl::*;
+        diesel::update(user_identities.find(userid))
+            .set(is_public.eq(visibility))
+            .execute(&mut conn)
+            .await?;
+        Ok(())
     }
 }

@@ -1,23 +1,18 @@
 use diesel::{insert_into, prelude::*};
-use futures_util::{
-    future::OptionFuture,
-    stream::{self, StreamExt},
-};
+use diesel_async::RunQueryDsl;
 
 use crate::{error::TimeError, models::*};
 
 impl super::DatabaseWrapper {
     pub async fn add_friend(&self, user: i32, friend: String) -> Result<UserIdentity, TimeError> {
-        let Some(friend) = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::user_identities::dsl::*;
+        let mut conn = self.db.get().await?;
+        use crate::schema::user_identities::dsl::*;
 
-                Ok(user_identities
-                    .filter(friend_code.eq(friend))
-                    .first::<UserIdentity>(&mut conn)
-                    .optional()?)
-            })
-            .await?
+        let Some(friend) = user_identities
+            .filter(friend_code.eq(friend))
+            .first::<UserIdentity>(&mut conn)
+            .await
+            .optional()?
         else {
             return Err(TimeError::UserNotFound);
         };
@@ -32,16 +27,13 @@ impl super::DatabaseWrapper {
             (friend.id, user)
         };
 
-        self.run_async_query(move |mut conn| {
-            insert_into(crate::schema::friend_relations::table)
-                .values(crate::models::NewFriendRelation {
-                    lesser_id: lesser,
-                    greater_id: greater,
-                })
-                .execute(&mut conn)?;
-            Ok(())
-        })
-        .await?;
+        insert_into(crate::schema::friend_relations::table)
+            .values(crate::models::NewFriendRelation {
+                lesser_id: lesser,
+                greater_id: greater,
+            })
+            .execute(&mut conn)
+            .await?;
 
         Ok(friend)
     }
@@ -53,33 +45,14 @@ impl super::DatabaseWrapper {
             user_identities::dsl::*,
         };
 
-        let friends = self
-            .run_async_query(move |mut conn| {
-                Ok(friend_relations
-                    .filter(greater_id.eq(user).or(lesser_id.eq(user)))
-                    .load::<FriendRelation>(&mut conn)?
-                    .iter()
-                    .map(
-                        |&FriendRelation {
-                             lesser_id: other_lesser_id,
-                             greater_id: other_greater_id,
-                             ..
-                         }| {
-                            if other_lesser_id == user {
-                                other_greater_id
-                            } else {
-                                other_lesser_id
-                            }
-                        },
-                    )
-                    .filter_map(|cur_friend| {
-                        user_identities
-                            .find(cur_friend)
-                            .first::<UserIdentity>(&mut conn)
-                            .ok()
-                    })
-                    .collect())
-            })
+        let mut conn = self.db.get().await?;
+
+        let friends = friend_relations
+            .inner_join(user_identities.on(id.eq(lesser_id).or(id.eq(greater_id))))
+            .select(user_identities::all_columns())
+            .distinct()
+            .filter(id.ne(user))
+            .load::<UserIdentity>(&mut conn)
             .await?;
 
         Ok(friends)
@@ -91,49 +64,61 @@ impl super::DatabaseWrapper {
             user_identities::dsl::*,
         };
 
-        let friends = stream::iter(
-            self.run_async_query(move |mut conn| {
-                Ok(friend_relations
-                    .filter(greater_id.eq(user).or(lesser_id.eq(user)))
-                    .load::<FriendRelation>(&mut conn)?
-                    .iter()
-                    .map(|fr| {
-                        if fr.lesser_id == user {
-                            fr.greater_id
-                        } else {
-                            fr.lesser_id
-                        }
-                    })
-                    .collect::<Vec<_>>())
+        let mut conn = self.db.get().await?;
+
+        let friends = friend_relations
+            .filter(lesser_id.eq(user).or(greater_id.eq(user)))
+            .inner_join(user_identities.on(id.eq(lesser_id).or(id.eq(greater_id))))
+            .distinct()
+            .filter(id.ne(user))
+            .select(user_identities::all_columns())
+            .load::<UserIdentity>(&mut conn)
+            .await?;
+
+        // FIXME: A further optimization could be applied
+        // by calculating the aggrigates (CodingTimeSteps)
+        // in the database. This can be done in a single SQL-query
+        // but due to limitations with diesel we would have to do it
+        // in a separate function called for example: coding_time_steps_for_users(ids: Vec<i32>)
+        let friends_with_time = CodingActivity::belonging_to(&friends)
+            .load::<CodingActivity>(&mut conn)
+            .await?
+            .grouped_by(&friends)
+            .iter()
+            .zip(friends)
+            .map(|(d, u)| FriendWithTime {
+                user: u,
+                coding_time: CodingTimeSteps {
+                    all_time: d.iter().map(|a| a.duration).sum(),
+                    past_month: d
+                        .iter()
+                        .map(|a| {
+                            if a.start_time
+                                >= chrono::Local::now().naive_local() - chrono::Duration::days(30)
+                            {
+                                a.duration
+                            } else {
+                                0
+                            }
+                        })
+                        .sum(),
+                    past_week: d
+                        .iter()
+                        .map(|a| {
+                            if a.start_time
+                                >= chrono::Local::now().naive_local() - chrono::Duration::days(30)
+                            {
+                                a.duration
+                            } else {
+                                0
+                            }
+                        })
+                        .sum(),
+                },
             })
-            .await?,
-        )
-        .then(|cur_friend| async move {
-            let opt_friends = self
-                .run_async_query(move |mut conn| {
-                    Ok(user_identities
-                        .find(cur_friend)
-                        .first::<UserIdentity>(&mut conn)
-                        .ok())
-                })
-                .await
-                .unwrap();
+            .collect::<Vec<_>>();
 
-            let future: OptionFuture<_> = opt_friends
-                .map(|friend| async {
-                    FriendWithTime {
-                        coding_time: self.get_coding_time_steps(friend.id).await,
-                        user: friend,
-                    }
-                })
-                .into();
-
-            future.await.unwrap()
-        })
-        .collect::<Vec<FriendWithTime>>()
-        .await;
-
-        Ok(friends)
+        Ok(friends_with_time)
     }
 
     pub async fn are_friends(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
@@ -144,14 +129,14 @@ impl super::DatabaseWrapper {
             (friend_id, user)
         };
 
-        self.run_async_query(move |mut conn| {
-            Ok(friend_relations
-                .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
-                .first::<FriendRelation>(&mut conn)
-                .optional()?
-                .is_some())
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        Ok(friend_relations
+            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+            .first::<FriendRelation>(&mut conn)
+            .await
+            .optional()?
+            .is_some())
     }
 
     pub async fn remove_friend(&self, user: i32, friend_id: i32) -> Result<bool, TimeError> {
@@ -162,13 +147,13 @@ impl super::DatabaseWrapper {
             (friend_id, user)
         };
 
-        self.run_async_query(move |mut conn| {
-            Ok(diesel::delete(friend_relations)
-                .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
-                .execute(&mut conn)?
-                != 0)
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        Ok(diesel::delete(friend_relations)
+            .filter(lesser_id.eq(lesser).and(greater_id.eq(greater)))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 
     pub async fn regenerate_friend_code(&self, userid: i32) -> Result<String, TimeError> {
@@ -176,14 +161,12 @@ impl super::DatabaseWrapper {
         let code = crate::utils::generate_friend_code();
         let code_clone = code.clone();
 
-        self.run_async_query(move |mut conn| {
-            diesel::update(user_identities.find(userid))
-                .set(friend_code.eq(code_clone))
-                .execute(&mut conn)?;
+        let mut conn = self.db.get().await?;
 
-            Ok(())
-        })
-        .await?;
+        diesel::update(user_identities.find(userid))
+            .set(friend_code.eq(code_clone))
+            .execute(&mut conn)
+            .await?;
 
         Ok(code)
     }
