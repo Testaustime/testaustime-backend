@@ -338,7 +338,7 @@ impl super::DatabaseWrapper {
             for m in ms {
                 if let Ok(user) = self.get_user_by_id(m.user_id).await {
                     full.push(PrivateLeaderboardMember {
-                        id: m.id,
+                        id: m.user_id,
                         username: user.username,
                         admin: m.admin,
                         time_coded: self
