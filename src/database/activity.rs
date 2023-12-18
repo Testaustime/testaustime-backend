@@ -20,14 +20,7 @@ impl super::DatabaseWrapper {
             user_id: updated_user_id,
             start_time: ctx_start_time,
             duration: ctx_duration.num_seconds() as i32,
-            // FIXME: wtf why is this done in the database?
-            project_name: if heartbeat.project_name.is_some()
-                && heartbeat.project_name.as_ref().unwrap().starts_with("tmp.")
-            {
-                Some(String::from("tmp"))
-            } else {
-                heartbeat.project_name.map(|s| s.to_lowercase())
-            },
+            project_name: heartbeat.project_name,
             language: heartbeat.language,
             editor_name: heartbeat.editor_name,
             hostname: heartbeat.hostname,
