@@ -176,7 +176,6 @@ impl super::DatabaseWrapper {
 
         let name = board.name.clone();
 
-        // FIXME: I'm not sure if a transaction is required here
         let member_count = conn
             .build_transaction()
             .read_write()

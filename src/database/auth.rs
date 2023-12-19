@@ -5,7 +5,12 @@ use argon2::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{error::TimeError, models::*, utils::*};
+use crate::{
+    error::TimeError,
+    models::*,
+    schema::{testaustime_users, user_identities},
+    utils::*,
+};
 
 impl super::DatabaseWrapper {
     pub async fn user_exists(&self, target_username: String) -> Result<bool, TimeError> {
@@ -57,19 +62,26 @@ impl super::DatabaseWrapper {
     // TODO: get rid of unwraps
     pub async fn verify_user_password(
         &self,
-        username: &str,
+        arg_username: &str,
         password: &str,
     ) -> Result<Option<UserIdentity>, TimeError> {
-        // FIXME: Use JOIN here
-        let user = self.get_user_by_name(username.to_string()).await?;
-        let tuser = self.get_testaustime_user_by_id(user.id).await?;
+        let mut conn = self.db.get().await?;
+
+        use user_identities::dsl::username;
+
+        let (user, tuser) = user_identities::table
+            .filter(username.eq(arg_username))
+            .inner_join(testaustime_users::table)
+            .first::<(UserIdentity, TestaustimeUser)>(&mut conn)
+            .await?;
 
         let argon2 = Argon2::default();
-        let Ok(salt) = SaltString::new(std::str::from_utf8(&tuser.salt).unwrap()) else {
+        let Ok(salt) = SaltString::new(std::str::from_utf8(&tuser.salt).expect("bug: impossible"))
+        else {
             return Ok(None); // The user has no password
         };
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
-        if password_hash.hash.unwrap().as_bytes() == tuser.password {
+        if password_hash.hash.expect("bug: impossible").as_bytes() == tuser.password {
             Ok(Some(user))
         } else {
             Ok(None)
@@ -98,7 +110,6 @@ impl super::DatabaseWrapper {
         username: &str,
         password: &str,
     ) -> Result<NewUserIdentity, TimeError> {
-        use crate::schema::{testaustime_users, user_identities};
         if self.user_exists(username.to_string()).await? {
             return Err(TimeError::UserExists);
         }
@@ -149,23 +160,32 @@ impl super::DatabaseWrapper {
         Ok(new_user)
     }
 
-    // FIXME: This could be done in a single transaction
     pub async fn change_username(&self, user: i32, new_username: String) -> Result<(), TimeError> {
-        if self.user_exists(new_username.to_string()).await? {
-            return Err(TimeError::UserExists);
-        }
-
         let mut conn = self.db.get().await?;
 
-        use crate::schema::user_identities::dsl::*;
-        diesel::update(crate::schema::user_identities::table)
-            .filter(id.eq(user))
-            .set(username.eq(new_username))
-            .execute(&mut conn)
-            .await
-            .map_err(|_| TimeError::UserExists)?;
+        conn.build_transaction()
+            .read_write()
+            .run(|mut conn| {
+                Box::pin(async move {
+                    use crate::schema::user_identities::dsl::*;
 
-        Ok(())
+                    user_identities
+                        .filter(username.eq(new_username.clone()))
+                        .first::<UserIdentity>(&mut conn)
+                        .await
+                        .map_err(|_| TimeError::UserExists)?;
+
+                    diesel::update(crate::schema::user_identities::table)
+                        .filter(id.eq(user))
+                        .set(username.eq(new_username))
+                        .execute(&mut conn)
+                        .await
+                        .map_err(|_| TimeError::UserExists)?;
+
+                    Ok::<(), TimeError>(())
+                })
+            })
+            .await
     }
 
     pub async fn change_password(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
