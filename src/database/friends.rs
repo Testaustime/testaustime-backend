@@ -106,7 +106,7 @@ impl super::DatabaseWrapper {
                         .iter()
                         .map(|a| {
                             if a.start_time
-                                >= chrono::Local::now().naive_local() - chrono::Duration::days(30)
+                                >= chrono::Local::now().naive_local() - chrono::Duration::days(7)
                             {
                                 a.duration
                             } else {
