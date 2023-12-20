@@ -93,12 +93,10 @@ impl super::DatabaseWrapper {
 
         let token = crate::utils::generate_token();
 
-        let token_clone = token.clone();
-
         use crate::schema::user_identities::dsl::*;
 
         diesel::update(user_identities.find(userid))
-            .set(auth_token.eq(token_clone))
+            .set(auth_token.eq(&token))
             .execute(&mut conn)
             .await?;
 
@@ -251,12 +249,10 @@ impl super::DatabaseWrapper {
             user_identities::dsl::{auth_token, id, user_identities},
         };
 
-        let user_id_arg_clone = user_id_arg.clone();
-
         let mut conn = self.db.get().await?;
 
         let user_identity_opt = testausid_users
-            .filter(user_id.eq(user_id_arg_clone))
+            .filter(user_id.eq(&user_id_arg))
             .select(identity)
             .first::<i32>(&mut conn)
             .await
