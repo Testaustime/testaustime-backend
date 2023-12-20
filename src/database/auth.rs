@@ -169,11 +169,14 @@ impl super::DatabaseWrapper {
                 Box::pin(async move {
                     use crate::schema::user_identities::dsl::*;
 
-                    user_identities
+                    if (user_identities
                         .filter(username.eq(new_username.clone()))
                         .first::<UserIdentity>(&mut conn)
-                        .await
-                        .map_err(|_| TimeError::UserExists)?;
+                        .await)
+                        .is_ok()
+                    {
+                        return Err(TimeError::UserExists);
+                    };
 
                     diesel::update(crate::schema::user_identities::table)
                         .filter(id.eq(user))
