@@ -59,7 +59,7 @@ pub struct NewTestaustimeUser {
     pub identity: i32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SelfUser {
     pub id: i32,
     pub auth_token: String,
@@ -107,7 +107,7 @@ pub struct TestausIdUser {
 
 use crate::schema::user_identities;
 
-#[derive(Insertable, Serialize, Clone)]
+#[derive(Insertable, Serialize, Clone, Deserialize)]
 #[diesel(table_name = user_identities)]
 pub struct NewUserIdentity {
     pub auth_token: String,
@@ -202,7 +202,7 @@ pub struct NewLeaderboardMember {
     pub admin: bool,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, Deserialize)]
 pub struct PrivateLeaderboardMember {
     pub id: i32,
     pub username: String,
@@ -210,7 +210,7 @@ pub struct PrivateLeaderboardMember {
     pub time_coded: i32,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, Deserialize)]
 pub struct PrivateLeaderboard {
     pub name: String,
     pub invite: String,

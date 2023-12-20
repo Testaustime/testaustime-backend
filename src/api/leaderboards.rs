@@ -5,7 +5,7 @@ use actix_web::{
 };
 use dashmap::DashMap;
 use diesel::result::DatabaseErrorKind;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     api::auth::SecuredUserIdentity,
@@ -14,12 +14,12 @@ use crate::{
     models::{PrivateLeaderboard, UserId},
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LeaderboardName {
     pub name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LeaderboardInvite {
     pub invite: String,
 }

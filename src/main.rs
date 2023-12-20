@@ -10,6 +10,9 @@ mod requests;
 mod schema;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 use std::{num::NonZeroU32, sync::Arc};
 
 use actix_cors::Cors;

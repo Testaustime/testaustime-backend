@@ -8,8 +8,6 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum TimeError {
     #[error("Failed to connect to database connection pool")]
-    R2d2Error(#[from] r2d2::Error),
-    #[error("Failed to connect to database connection pool")]
     DeadpoolError(#[from] diesel_async::pooled_connection::deadpool::PoolError),
     #[error("Diesel transaction failed `{0}`")]
     DieselError(#[from] diesel::result::Error),
