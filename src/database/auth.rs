@@ -267,10 +267,8 @@ impl super::DatabaseWrapper {
 
             Ok(token)
         } else {
-            let token = generate_token();
             let new_user = NewUserIdentity {
-                //FIXME: You can get around using a clone here
-                auth_token: token.clone(),
+                auth_token: generate_token(),
                 registration_time: chrono::Local::now().naive_local(),
                 username,
                 friend_code: generate_friend_code(),
@@ -293,7 +291,7 @@ impl super::DatabaseWrapper {
                 .execute(&mut conn)
                 .await?;
 
-            Ok(token)
+            Ok(new_user.auth_token)
         }
     }
 
