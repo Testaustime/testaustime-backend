@@ -130,7 +130,6 @@ async fn main() -> std::io::Result<()> {
             .service({
                 let scope = web::scope("")
                     .wrap(tracing)
-                    .wrap(actix_web::middleware::Logger::new("Finished in %Dms"))
                     .wrap(AuthMiddleware)
                     .wrap(TestaustimeRateLimiter {
                         limiter: Arc::clone(&ratelimiter),
