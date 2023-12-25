@@ -11,7 +11,7 @@ use actix_web::{
 use futures::future::LocalBoxFuture;
 
 use self::secured_access::SecuredAccessTokenStorage;
-use crate::{database::DatabaseWrapper, error::TimeError, models::UserIdentity};
+use crate::{database::DatabaseWrapper, models::UserIdentity};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {
@@ -70,40 +70,39 @@ where
 
         Box::pin(async move {
             if let Some(auth) = auth {
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else {
-                    return Err(ErrorUnauthorized(TimeError::Unauthorized));
-                };
+                if let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") {
+                    let db = db.await.map_err(ErrorInternalServerError)?;
 
-                let db = db.await.map_err(ErrorInternalServerError)?;
+                    if let Ok(secured_access_instance) = secured_access_storage.get(token).clone() {
+                        let user = db
+                            .get_user_by_id(secured_access_instance.user_id)
+                            .await
+                            .map_err(ErrorUnauthorized)?;
 
-                if let Ok(secured_access_instance) = secured_access_storage.get(token).clone() {
-                    let user = db
-                        .get_user_by_id(secured_access_instance.user_id)
-                        .await
-                        .map_err(ErrorUnauthorized)?;
+                        req.extensions_mut()
+                            .insert(Authentication::SecuredAuthToken(user));
+                    } else {
+                        let user = db
+                            .get_user_by_token(token.to_string())
+                            .await
+                            .map_err(ErrorUnauthorized);
 
-                    req.extensions_mut()
-                        .insert(Authentication::SecuredAuthToken(user));
-                    let resp = service.call(req).await?;
-
-                    Ok(resp)
+                        if let Ok(user_identity) = user {
+                            req.extensions_mut()
+                                .insert(Authentication::AuthToken(user_identity));
+                        } else {
+                            req.extensions_mut().insert(Authentication::NoAuth);
+                        }
+                    }
                 } else {
-                    let user = db
-                        .get_user_by_token(token.to_string())
-                        .await
-                        .map_err(ErrorUnauthorized)?;
-
-                    req.extensions_mut().insert(Authentication::AuthToken(user));
-                    let resp = service.call(req).await?;
-
-                    Ok(resp)
+                    req.extensions_mut().insert(Authentication::NoAuth);
                 }
             } else {
                 req.extensions_mut().insert(Authentication::NoAuth);
-                let resp = service.call(req).await?;
-
-                Ok(resp)
             }
+
+            let resp = service.call(req).await?;
+            Ok(resp)
         })
     }
 }
