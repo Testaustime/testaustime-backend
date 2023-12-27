@@ -20,6 +20,22 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_DB: testaustime
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -27,9 +43,17 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Install Diesel
+        run: cargo install diesel_cli --features=postgres
+      - name: Create Test DB
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost/testaustime
+        run: diesel migration run
+
+      - name: Run tests
+        env:
+          TEST_DATABASE: postgres://postgres:postgres@localhost/testaustime
+        run: cargo test
 
   fmt:
     name: Rustfmt

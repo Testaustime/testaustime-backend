@@ -39,7 +39,7 @@ pub struct DataRequest {
     pub project_name: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct RegisterRequest {
     pub username: String,
     pub password: String,
