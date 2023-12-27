@@ -104,14 +104,24 @@ pub async fn get_current_activity(
 
     match heartbeats.get(&target_user) {
         Some(heartbeat) => {
-            let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+            let (inner_heartbeat, start, duration) = heartbeat.to_owned();
             drop(heartbeat);
-            let current_heartbeat = CurrentActivity {
-                started: start_time,
-                duration: duration.num_seconds(),
-                heartbeat: inner_heartbeat,
-            };
-            Ok(web::Json(Some(current_heartbeat)))
+            let curtime = Local::now().naive_local();
+            if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
+                db.add_activity(target_user, inner_heartbeat, start, duration)
+                    .await
+                    .map_err(ErrorInternalServerError)?;
+
+                heartbeats.remove(&target_user);
+                Err(TimeError::NotActive)
+            } else {
+                let current_heartbeat = CurrentActivity {
+                    started: start,
+                    duration: duration.num_seconds(),
+                    heartbeat: inner_heartbeat,
+                };
+                Ok(web::Json(Some(current_heartbeat)))
+            }
         }
         None => Err(TimeError::NotActive),
     }
