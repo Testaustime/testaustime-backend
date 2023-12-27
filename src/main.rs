@@ -26,10 +26,6 @@ use awc::Client;
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::Database;
-use diesel::{
-    r2d2::{ConnectionManager, Pool},
-    PgConnection,
-};
 use governor::{Quota, RateLimiter};
 use ratelimiter::TestaustimeRateLimiter;
 use serde_derive::Deserialize;
@@ -88,13 +84,7 @@ async fn main() -> std::io::Result<()> {
         toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
             .expect("Invalid Toml in settings.toml");
 
-    let manager = ConnectionManager::<PgConnection>::new(config.database_url);
-
-    let pool = Pool::builder()
-        .build(manager)
-        .expect("Failed to create connection pool");
-
-    let database = Data::new(Database::new(pool));
+    let database = Data::new(Database::new(config.database_url));
 
     let register_limiter = Data::new(RegisterLimiter {
         limit_by_peer_ip: config.ratelimit_by_peer_ip,

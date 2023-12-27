@@ -2,25 +2,21 @@ use std::collections::HashMap;
 
 use chrono::prelude::*;
 use diesel::{insert_into, prelude::*};
+use diesel_async::RunQueryDsl;
+use futures_util::TryStreamExt;
 
-use crate::{api::users::ListLeaderboard, error::TimeError, models::*};
+use crate::{
+    api::users::ListLeaderboard,
+    error::TimeError,
+    models::*,
+    schema::{
+        coding_activities,
+        leaderboard_members::{self, user_id},
+        user_identities,
+    },
+};
 
 impl super::DatabaseWrapper {
-    pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
-        use crate::schema::coding_activities::dsl::*;
-
-        let res = self
-            .run_async_query(move |mut conn| {
-                Ok(diesel::delete(crate::schema::coding_activities::table)
-                    .filter(id.eq(activity))
-                    .filter(user_id.eq(userid))
-                    .execute(&mut conn)?)
-            })
-            .await?;
-
-        Ok(res != 0)
-    }
-
     pub async fn create_leaderboard(
         &self,
         creator_id: i32,
@@ -33,31 +29,35 @@ impl super::DatabaseWrapper {
             invite_code: code.clone(),
         };
 
-        let lid = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboards::dsl::*;
+        let mut conn = self.db.get().await?;
 
-                Ok(insert_into(crate::schema::leaderboards::table)
-                    .values(&board)
-                    .returning(id)
-                    .get_results(&mut conn)?[0])
+        conn.build_transaction()
+            .read_write()
+            .run(|mut conn| {
+                Box::pin(async move {
+                    use crate::schema::leaderboards::dsl::*;
+
+                    let lid = insert_into(crate::schema::leaderboards::table)
+                        .values(&board)
+                        .returning(id)
+                        .get_results(&mut conn)
+                        .await?[0];
+
+                    let admin = NewLeaderboardMember {
+                        user_id: creator_id,
+                        admin: true,
+                        leaderboard_id: lid,
+                    };
+
+                    insert_into(crate::schema::leaderboard_members::table)
+                        .values(admin)
+                        .execute(&mut conn)
+                        .await?;
+
+                    Ok::<(), TimeError>(())
+                })
             })
             .await?;
-
-        let admin = NewLeaderboardMember {
-            user_id: creator_id,
-            admin: true,
-            leaderboard_id: lid,
-        };
-
-        self.run_async_query(move |mut conn| {
-            insert_into(crate::schema::leaderboard_members::table)
-                .values(admin)
-                .execute(&mut conn)?;
-
-            Ok(())
-        })
-        .await?;
 
         Ok(code)
     }
@@ -67,91 +67,90 @@ impl super::DatabaseWrapper {
 
         let newinvite_clone = newinvite.clone();
 
-        self.run_async_query(move |mut conn| {
-            use crate::schema::leaderboards::dsl::*;
-            diesel::update(crate::schema::leaderboards::table)
-                .filter(id.eq(lid))
-                .set(invite_code.eq(newinvite_clone))
-                .execute(&mut conn)?;
-            Ok(())
-        })
-        .await?;
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::leaderboards::dsl::*;
+        diesel::update(leaderboards.find(lid))
+            .set(invite_code.eq(newinvite_clone))
+            .execute(&mut conn)
+            .await?;
 
         Ok(newinvite)
     }
 
     pub async fn delete_leaderboard(&self, lname: String) -> Result<bool, TimeError> {
-        let res = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboards::dsl::*;
-                Ok(diesel::delete(crate::schema::leaderboards::table)
-                    .filter(name.eq(lname))
-                    .execute(&mut conn)?)
-            })
-            .await?;
+        let mut conn = self.db.get().await?;
 
-        Ok(res != 0)
+        use crate::schema::leaderboards::dsl::*;
+        Ok(diesel::delete(crate::schema::leaderboards::table)
+            .filter(name.eq(lname))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 
     pub async fn get_leaderboard_id_by_name(&self, lname: String) -> Result<i32, TimeError> {
-        self.run_async_query(move |mut conn| {
-            sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
-            use crate::schema::leaderboards::dsl::*;
+        sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+        use crate::schema::leaderboards::dsl::*;
 
-            Ok(leaderboards
-                .filter(lower(name).eq(lname.to_lowercase()))
-                .select(id)
-                .first::<i32>(&mut conn)?)
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        Ok(leaderboards
+            .filter(lower(name).eq(lname.to_lowercase()))
+            .select(id)
+            .first::<i32>(&mut conn)
+            .await?)
     }
 
     pub async fn get_leaderboard(&self, lname: String) -> Result<PrivateLeaderboard, TimeError> {
         sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
-        let board = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboards::dsl::*;
+        let mut conn = self.db.get().await?;
 
-                Ok(leaderboards
-                    .filter(lower(name).eq(lname.to_lowercase()))
-                    .first::<Leaderboard>(&mut conn)?)
-            })
+        let board = {
+            use crate::schema::leaderboards::dsl::*;
+
+            leaderboards
+                .filter(lower(name).eq(lname.to_lowercase()))
+                .first::<Leaderboard>(&mut conn)
+                .await?
+        };
+
+        use crate::schema::{
+            coding_activities::dsl::start_time,
+            user_identities::dsl::{id, user_identities},
+        };
+
+        let members = LeaderboardMember::belonging_to(&board)
+            .inner_join(user_identities.on(id.eq(user_id)))
+            .load::<(LeaderboardMember, UserIdentity)>(&mut conn)
             .await?;
 
-        let members = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboard_members::dsl::*;
-
-                Ok(leaderboard_members
-                    .filter(leaderboard_id.eq(board.id))
-                    .load::<LeaderboardMember>(&mut conn)?)
-            })
-            .await?;
-
-        let mut fullmembers = Vec::new();
         let aweekago = NaiveDateTime::new(
-            chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
+            Local::now().date_naive() - chrono::Duration::weeks(1),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
         );
 
-        for m in members {
-            if let Ok(user) = self.get_user_by_id(m.user_id).await {
-                fullmembers.push(PrivateLeaderboardMember {
-                    id: m.id,
-                    username: user.username,
+        let members =
+            CodingActivity::belonging_to(&members.iter().map(|(_, u)| u).collect::<Vec<_>>())
+                .filter(start_time.ge(aweekago))
+                .load::<CodingActivity>(&mut conn)
+                .await?
+                .grouped_by(&members.iter().map(|(_, u)| u).collect::<Vec<_>>())
+                .iter()
+                .zip(members.iter())
+                .map(|(d, (m, u))| PrivateLeaderboardMember {
+                    id: u.id,
+                    username: u.username.clone(),
                     admin: m.admin,
-                    time_coded: self
-                        .get_user_coding_time_since(m.user_id, aweekago)
-                        .await
-                        .unwrap_or(0),
-                });
-            }
-        }
+                    time_coded: d.iter().map(|a| a.duration).sum(),
+                })
+                .collect::<Vec<_>>();
+
         Ok(PrivateLeaderboard {
             name: board.name,
             invite: board.invite_code,
             creation_time: board.creation_time,
-            members: fullmembers,
+            members,
         })
     }
 
@@ -160,41 +159,47 @@ impl super::DatabaseWrapper {
         uid: i32,
         invite: String,
     ) -> Result<crate::api::users::MinimalLeaderboard, TimeError> {
-        let (lid, name) = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboards::dsl::*;
-                Ok(leaderboards
-                    .filter(invite_code.eq(invite))
-                    .select((id, name))
-                    .first::<(i32, String)>(&mut conn)?)
-            })
+        use crate::schema::leaderboards::dsl::{invite_code, leaderboards};
+
+        let mut conn = self.db.get().await?;
+
+        let board = leaderboards
+            .filter(invite_code.eq(invite))
+            .first::<Leaderboard>(&mut conn)
             .await?;
 
         let user = NewLeaderboardMember {
             user_id: uid,
-            leaderboard_id: lid,
+            leaderboard_id: board.id,
             admin: false,
         };
 
-        self.run_async_query(move |mut conn| {
-            insert_into(crate::schema::leaderboard_members::table)
-                .values(&user)
-                .execute(&mut conn)?;
-            Ok(())
-        })
-        .await?;
+        let name = board.name.clone();
 
-        let member_count: i32 = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboard_members::dsl::*;
-                Ok(leaderboard_members
-                    .filter(leaderboard_id.eq(lid))
-                    .select(diesel::dsl::count(user_id))
-                    .first::<i64>(&mut conn)? as i32)
+        let member_count = conn
+            .build_transaction()
+            .read_write()
+            .run(|mut conn| {
+                Box::pin(async move {
+                    diesel::insert_into(leaderboard_members::table)
+                        .values(&user)
+                        .execute(&mut conn)
+                        .await?;
+
+                    Ok::<i64, TimeError>(
+                        LeaderboardMember::belonging_to(&board)
+                            .count()
+                            .first::<i64>(&mut conn)
+                            .await?,
+                    )
+                })
             })
             .await?;
 
-        Ok(crate::api::users::MinimalLeaderboard { name, member_count })
+        Ok(crate::api::users::MinimalLeaderboard {
+            name,
+            member_count: member_count as i32,
+        })
     }
 
     pub async fn remove_user_from_leaderboard(
@@ -203,15 +208,14 @@ impl super::DatabaseWrapper {
         uid: i32,
     ) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        let res = self
-            .run_async_query(move |mut conn| {
-                Ok(diesel::delete(crate::schema::leaderboard_members::table)
-                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-                    .execute(&mut conn)?)
-            })
-            .await?;
 
-        Ok(res != 0)
+        let mut conn = self.db.get().await?;
+
+        Ok(diesel::delete(crate::schema::leaderboard_members::table)
+            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 
     pub async fn promote_user_to_leaderboard_admin(
@@ -220,16 +224,14 @@ impl super::DatabaseWrapper {
         uid: i32,
     ) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        let res = self
-            .run_async_query(move |mut conn| {
-                Ok(diesel::update(crate::schema::leaderboard_members::table)
-                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-                    .set(admin.eq(true))
-                    .execute(&mut conn)?)
-            })
-            .await?;
 
-        Ok(res != 0)
+        let mut conn = self.db.get().await?;
+        Ok(diesel::update(crate::schema::leaderboard_members::table)
+            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+            .set(admin.eq(true))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 
     pub async fn demote_user_to_leaderboard_member(
@@ -237,136 +239,147 @@ impl super::DatabaseWrapper {
         lid: i32,
         uid: i32,
     ) -> Result<bool, TimeError> {
-        let res = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboard_members::dsl::*;
+        use crate::schema::leaderboard_members::dsl::*;
 
-                Ok(diesel::update(crate::schema::leaderboard_members::table)
-                    .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-                    .set(admin.eq(false))
-                    .execute(&mut conn)?)
-            })
-            .await?;
-        Ok(res != 0)
+        let mut conn = self.db.get().await?;
+        Ok(diesel::update(crate::schema::leaderboard_members::table)
+            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+            .set(admin.eq(false))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 
     pub async fn is_leaderboard_member(&self, uid: i32, lid: i32) -> Result<bool, TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::leaderboard_members::dsl::*;
+        let mut conn = self.db.get().await?;
+        use crate::schema::leaderboard_members::dsl::*;
 
-            Ok(leaderboard_members
-                .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
-                .select(id)
-                .first::<i32>(&mut conn)
-                .optional()?
-                .is_some())
-        })
-        .await
+        Ok(leaderboard_members
+            .filter(user_id.eq(uid).and(leaderboard_id.eq(lid)))
+            .select(id)
+            .first::<i32>(&mut conn)
+            .await
+            .optional()?
+            .is_some())
     }
 
     pub async fn is_leaderboard_admin(&self, uid: i32, lid: i32) -> Result<bool, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        self.run_async_query(move |mut conn| {
-            Ok(leaderboard_members
-                .filter(leaderboard_id.eq(lid).and(user_id.eq(uid)))
-                .select(admin)
-                .first::<bool>(&mut conn)
-                .optional()?
-                .unwrap_or(false))
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        Ok(leaderboard_members
+            .filter(leaderboard_id.eq(lid).and(user_id.eq(uid)))
+            .select(admin)
+            .first::<bool>(&mut conn)
+            .await
+            .optional()?
+            .unwrap_or(false))
     }
 
     pub async fn get_leaderboard_admin_count(&self, lid: i32) -> Result<i64, TimeError> {
         use crate::schema::leaderboard_members::dsl::*;
-        self.run_async_query(move |mut conn| {
-            Ok(leaderboard_members
-                .filter(leaderboard_id.eq(lid).and(admin.eq(true)))
-                .select(diesel::dsl::count(user_id))
-                .first::<i64>(&mut conn)?)
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        Ok(leaderboard_members
+            .filter(leaderboard_id.eq(lid).and(admin.eq(true)))
+            .select(diesel::dsl::count(user_id))
+            .first::<i64>(&mut conn)
+            .await?)
     }
 
     pub async fn get_user_leaderboards(
         &self,
         uid: i32,
     ) -> Result<Vec<crate::api::users::ListLeaderboard>, TimeError> {
-        let ids = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboard_members::dsl::*;
+        let mut conn = self.db.get().await?;
 
-                Ok(leaderboard_members
-                    .filter(user_id.eq(uid))
-                    .select(leaderboard_id)
-                    .order_by(leaderboard_id.asc())
-                    .load::<i32>(&mut conn)?)
-            })
+        let user = user_identities::table
+            .find(uid)
+            .first::<UserIdentity>(&mut conn)
             .await?;
 
-        let members = self
-            .run_async_query(move |mut conn| {
-                use crate::schema::leaderboards::dsl::*;
-                let ls = leaderboards
-                    .filter(id.eq_any(&ids))
-                    .order_by(id.asc())
-                    .load::<Leaderboard>(&mut conn)?;
-
-                let mut members: HashMap<Leaderboard, Vec<LeaderboardMember>> = HashMap::new();
-                for l in &ls {
-                    members.insert(l.clone(), {
-                        use crate::schema::leaderboard_members::dsl::*;
-                        leaderboard_members
-                            .filter(leaderboard_id.eq(l.id))
-                            .load::<LeaderboardMember>(&mut conn)?
-                    });
-                }
-
-                Ok(members)
-            })
+        let boards = LeaderboardMember::belonging_to(&user)
+            .inner_join(crate::schema::leaderboards::table)
+            .select(crate::schema::leaderboards::dsl::leaderboards::all_columns())
+            .load::<Leaderboard>(&mut conn)
             .await?;
 
         let aweekago = NaiveDateTime::new(
-            chrono::Local::today().naive_local() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight(0, 0),
+            Local::now().date_naive() - chrono::Duration::weeks(1),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
         );
 
-        // FIXME: cache members
-        let mut fullmembers = HashMap::new();
-        for (l, ms) in members {
-            let mut full = Vec::new();
-            for m in ms {
-                if let Ok(user) = self.get_user_by_id(m.user_id).await {
-                    full.push(PrivateLeaderboardMember {
-                        id: m.user_id,
-                        username: user.username,
-                        admin: m.admin,
-                        time_coded: self
-                            .get_user_coding_time_since(m.user_id, aweekago)
-                            .await
-                            .unwrap_or(0),
-                    });
-                }
-            }
-            fullmembers.insert(l, full);
-        }
+        // FIXME: We could maybe use limit here because we only need the
+        // user and the top member
+        let members = LeaderboardMember::belonging_to(&boards.iter().collect::<Vec<_>>())
+            //.inner_join(crate::schema::user_identities::table)
+            .left_join(
+                crate::schema::coding_activities::table.on(leaderboard_members::dsl::user_id
+                    .eq(coding_activities::dsl::user_id)
+                    .and(coding_activities::dsl::start_time.ge(aweekago))),
+            )
+            .group_by(leaderboard_members::dsl::id)
+            .select((
+                leaderboard_members::dsl::leaderboard_members::all_columns(),
+                // NOTE: This is a work-around (diesel has some issues with group_by)
+                diesel::dsl::sql::<diesel::sql_types::BigInt>(
+                    "COALESCE(SUM(coding_activities.duration), 0) AS coding_time",
+                ),
+            ))
+            .order_by(diesel::dsl::sql::<diesel::sql_types::BigInt>("coding_time").desc())
+            .load::<(LeaderboardMember, i64)>(&mut conn)
+            .await?;
 
-        let mut ret = Vec::new();
-        for (l, mut ms) in fullmembers {
-            ms.sort_by_key(|m| m.time_coded);
-            // NOTE: Leaderboards can't be empty here as they have to contain user
-            let mypos = ms.iter().position(|m| m.id == uid).unwrap();
-            let me = ms.get(mypos).unwrap();
-            let top = ms.last().unwrap();
-            ret.push(ListLeaderboard {
-                name: l.name,
-                me: me.clone(),
-                my_position: (mypos + 1) as i32,
-                member_count: ms.len() as i32,
-                top_member: top.clone(),
+        let usernames = LeaderboardMember::belonging_to(&boards.iter().collect::<Vec<_>>())
+            .inner_join(crate::schema::user_identities::table)
+            .group_by(user_identities::dsl::id)
+            .select((user_identities::dsl::id, user_identities::dsl::username))
+            .load_stream::<(i32, String)>(&mut conn)
+            .await?
+            .try_fold(HashMap::new(), |mut acc, (id, name)| {
+                acc.insert(id, name);
+                futures_util::future::ready(Ok(acc))
             })
-        }
+            .await?;
 
-        Ok(ret)
+        let members_populated = members
+            .iter()
+            .map(|(m, t)| {
+                (
+                    m.leaderboard_id,
+                    PrivateLeaderboardMember {
+                        id: m.user_id,
+                        username: usernames[&m.user_id].clone(),
+                        admin: m.admin,
+                        time_coded: *t as i32,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+
+        Ok(boards
+            .iter()
+            .map(|b| {
+                let bms = members_populated
+                    .iter()
+                    .filter(|(lid, _)| *lid == b.id)
+                    .map(|(_, m)| m)
+                    .collect::<Vec<_>>();
+
+                let (my_position, me) = bms
+                    .iter()
+                    .enumerate()
+                    .find(|(_, m)| m.id == user.id)
+                    .expect("bug: impossible");
+                ListLeaderboard {
+                    name: b.name.clone(),
+                    member_count: bms.len() as i32,
+                    // NOTE: Sorted in the query
+                    top_member: bms[0].clone(),
+                    my_position: my_position as i32 + 1,
+                    me: (*me).clone(),
+                }
+            })
+            .collect::<Vec<_>>())
     }
 }

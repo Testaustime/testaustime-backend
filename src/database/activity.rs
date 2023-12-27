@@ -1,5 +1,6 @@
 use chrono::{prelude::*, Duration};
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
 use crate::{
     error::TimeError,
@@ -19,40 +20,32 @@ impl super::DatabaseWrapper {
             user_id: updated_user_id,
             start_time: ctx_start_time,
             duration: ctx_duration.num_seconds() as i32,
-            project_name: if heartbeat.project_name.is_some()
-                && heartbeat.project_name.as_ref().unwrap().starts_with("tmp.")
-            {
-                Some(String::from("tmp"))
-            } else {
-                heartbeat.project_name.map(|s| s.to_lowercase())
-            },
+            project_name: heartbeat.project_name,
             language: heartbeat.language,
             editor_name: heartbeat.editor_name,
             hostname: heartbeat.hostname,
         };
 
-        self.run_async_query(move |mut conn| {
-            use crate::schema::coding_activities::dsl::*;
+        let mut conn = self.db.get().await?;
 
-            diesel::insert_into(coding_activities)
-                .values(activity)
-                .execute(&mut conn)?;
+        use crate::schema::coding_activities::dsl::*;
 
-            Ok(())
-        })
-        .await?;
+        diesel::insert_into(coding_activities)
+            .values(activity)
+            .execute(&mut conn)
+            .await?;
 
         Ok(())
     }
 
     pub async fn get_all_activity(&self, user: i32) -> Result<Vec<CodingActivity>, TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::coding_activities::dsl::*;
-            Ok(coding_activities
-                .filter(user_id.eq(user))
-                .load::<CodingActivity>(&mut conn)?)
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::coding_activities::dsl::*;
+        Ok(coding_activities
+            .filter(user_id.eq(user))
+            .load::<CodingActivity>(&mut conn)
+            .await?)
     }
 
     pub async fn get_activity(
@@ -84,8 +77,8 @@ impl super::DatabaseWrapper {
             query = query.filter(duration.ge(min_duration));
         };
 
-        self.run_async_query(move |mut conn| Ok(query.load::<CodingActivity>(&mut conn)?))
-            .await
+        let mut conn = self.db.get().await?;
+        Ok(query.load::<CodingActivity>(&mut conn).await?)
     }
 
     pub async fn get_user_coding_time_since(
@@ -93,22 +86,25 @@ impl super::DatabaseWrapper {
         uid: i32,
         since: chrono::NaiveDateTime,
     ) -> Result<i32, TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::coding_activities::dsl::*;
+        let mut conn = self.db.get().await?;
 
-            Ok(coding_activities
-                .filter(user_id.eq(uid).and(start_time.ge(since)))
-                .select(diesel::dsl::sum(duration))
-                .first::<Option<i64>>(&mut conn)?
-                .unwrap_or(0) as i32)
-        })
-        .await
+        use crate::schema::coding_activities::dsl::*;
+
+        Ok(coding_activities
+            .filter(user_id.eq(uid).and(start_time.ge(since)))
+            .select(diesel::dsl::sum(duration))
+            .first::<Option<i64>>(&mut conn)
+            .await?
+            .unwrap_or(0) as i32)
     }
 
     pub async fn get_coding_time_steps(&self, uid: i32) -> CodingTimeSteps {
         CodingTimeSteps {
             all_time: self
-                .get_user_coding_time_since(uid, chrono::NaiveDateTime::from_timestamp(0, 0))
+                .get_user_coding_time_since(
+                    uid,
+                    chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                )
                 .await
                 .unwrap_or(0),
             past_month: self
@@ -134,14 +130,27 @@ impl super::DatabaseWrapper {
         from: String,
         to: String,
     ) -> Result<usize, TimeError> {
-        self.run_async_query(move |mut conn| {
-            use crate::schema::coding_activities::dsl::*;
-            Ok(diesel::update(coding_activities)
-                .filter(user_id.eq(target_user_id))
-                .filter(project_name.eq(from))
-                .set(project_name.eq(to))
-                .execute(&mut conn)?)
-        })
-        .await
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::coding_activities::dsl::*;
+        Ok(diesel::update(coding_activities)
+            .filter(user_id.eq(target_user_id))
+            .filter(project_name.eq(from))
+            .set(project_name.eq(to))
+            .execute(&mut conn)
+            .await?)
+    }
+
+    pub async fn delete_activity(&self, userid: i32, activity: i32) -> Result<bool, TimeError> {
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::coding_activities::dsl::*;
+
+        Ok(diesel::delete(coding_activities.find(activity))
+            // FIXME: This filter is useless?
+            .filter(user_id.eq(userid))
+            .execute(&mut conn)
+            .await?
+            != 0)
     }
 }

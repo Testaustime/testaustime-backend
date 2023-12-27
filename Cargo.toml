@@ -22,7 +22,6 @@ regex = "1.5"
 tracing = "0.1.37"
 tracing-actix-web = "0.6.2"
 
-diesel = { version = "2.1.0", features = ["postgres", "chrono", "r2d2", "serde_json"] }
 r2d2 = "0.8"
 
 log = "0.4"
@@ -45,3 +44,5 @@ url = "2.2"
 
 itertools = "0.10.3"
 governor = "0.6.0"
+diesel = { version = "2.1.0", features = ["chrono", "serde_json"] }
+diesel-async = { version = "0.4.1", features = ["postgres", "deadpool"] }

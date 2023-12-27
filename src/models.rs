@@ -6,7 +6,8 @@ pub struct UserId {
     pub id: i32,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Identifiable, Queryable, Clone, Debug, Serialize, PartialEq, Eq)]
+#[diesel(table_name = user_identities)]
 pub struct UserIdentity {
     pub id: i32,
     #[serde(skip_serializing)]
@@ -34,7 +35,9 @@ impl From<UserIdentity> for PublicUser {
     }
 }
 
-#[derive(Queryable, Clone, Debug, Serialize)]
+#[derive(Queryable, Clone, Debug, Serialize, Identifiable, Associations)]
+#[diesel(belongs_to(UserIdentity, foreign_key=identity))]
+#[diesel(table_name = testaustime_users)]
 pub struct TestaustimeUser {
     pub id: i32,
     #[serde(skip_serializing)]
@@ -56,8 +59,6 @@ pub struct NewTestaustimeUser {
     pub identity: i32,
 }
 
-// This is here so that vilepis doesn't actually give friends each others' auth tokens
-// Fuck off
 #[derive(Clone, Debug, Serialize)]
 pub struct SelfUser {
     pub id: i32,
@@ -94,7 +95,9 @@ pub struct NewTestausIdUser {
 }
 
 #[cfg(feature = "testausid")]
-#[derive(Queryable, Serialize, Clone)]
+#[derive(Queryable, Serialize, Clone, Associations, Identifiable)]
+#[diesel(belongs_to(UserIdentity, foreign_key=identity))]
+#[diesel(table_name = testausid_users)]
 pub struct TestausIdUser {
     pub id: i32,
     pub user_id: String,
@@ -113,7 +116,9 @@ pub struct NewUserIdentity {
     pub registration_time: chrono::NaiveDateTime,
 }
 
-#[derive(Queryable, Clone, Debug)]
+// NOTE: It is impossible to use diesel::assocations here
+// https://github.com/diesel-rs/diesel/issues/2142
+#[derive(Queryable, Clone, Debug, Identifiable)]
 pub struct FriendRelation {
     pub id: i32,
     pub lesser_id: i32,
@@ -129,7 +134,9 @@ pub struct NewFriendRelation {
     pub greater_id: i32,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize)]
+#[derive(Queryable, Clone, Debug, Serialize, Identifiable, Associations)]
+#[diesel(belongs_to(UserIdentity, foreign_key=user_id))]
+#[diesel(table_name = coding_activities)]
 pub struct CodingActivity {
     pub id: i32,
     #[serde(skip_serializing)]
@@ -156,7 +163,7 @@ pub struct NewCodingActivity {
     pub hostname: Option<String>,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize, Hash, Eq, PartialEq)]
+#[derive(Queryable, Clone, Debug, Serialize, Hash, Eq, PartialEq, Identifiable)]
 pub struct Leaderboard {
     pub id: i32,
     pub name: String,
@@ -174,7 +181,10 @@ pub struct NewLeaderboard {
     pub creation_time: chrono::NaiveDateTime,
 }
 
-#[derive(Queryable, Clone, Debug)]
+#[derive(Queryable, Clone, Debug, Identifiable, Associations)]
+#[diesel(belongs_to(Leaderboard))]
+#[diesel(belongs_to(UserIdentity, foreign_key=user_id))]
+#[diesel(table_name = leaderboard_members)]
 pub struct LeaderboardMember {
     pub id: i32,
     pub leaderboard_id: i32,

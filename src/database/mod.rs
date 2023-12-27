@@ -1,13 +1,12 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
-use actix_web::{
-    dev::Payload,
-    web::{block, Data},
-    FromRequest, HttpRequest,
-};
-use diesel::{
-    prelude::*,
-    r2d2::{ConnectionManager, Pool},
+use actix_web::{dev::Payload, web::Data, FromRequest, HttpRequest};
+use diesel_async::{
+    pooled_connection::{
+        deadpool::{Object, Pool},
+        AsyncDieselConnectionManager,
+    },
+    AsyncPgConnection,
 };
 
 use crate::error::TimeError;
@@ -18,10 +17,10 @@ pub mod friends;
 pub mod leaderboards;
 pub mod misc;
 
-type DatabaseConnection = diesel::r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+type DatabaseConnection = Object<AsyncPgConnection>;
 
 pub struct Database {
-    backend: Pool<ConnectionManager<PgConnection>>,
+    backend: Pool<AsyncPgConnection>,
 }
 
 pub struct DatabaseWrapper {
@@ -46,25 +45,17 @@ impl FromRequest for DatabaseWrapper {
 }
 
 impl Database {
-    fn get(&self) -> Result<DatabaseConnection, TimeError> {
-        Ok(self.backend.get()?)
+    async fn get(&self) -> Result<DatabaseConnection, TimeError> {
+        Ok(self.backend.get().await?)
     }
 
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+    pub fn new(url: String) -> Self {
+        let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(url);
+
+        let pool = Pool::builder(manager)
+            .build()
+            .expect("Failed to create connection pool");
+
         Self { backend: pool }
-    }
-}
-
-impl DatabaseWrapper {
-    async fn run_async_query<
-        T: Send + 'static,
-        F: FnOnce(DatabaseConnection) -> Result<T, TimeError> + Send + 'static,
-    >(
-        &self,
-        query: F,
-    ) -> Result<T, TimeError> {
-        let conn = self.db.get()?;
-
-        block(move || query(conn)).await?
     }
 }
