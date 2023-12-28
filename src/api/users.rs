@@ -129,7 +129,7 @@ pub async fn get_current_activity(
 
 #[get("/users/{username}/activity/data")]
 pub async fn get_activities(
-    data: Query<DataRequest>,
+    Query(data): Query<DataRequest>,
     path: Path<(String,)>,
     opt_user: UserIdentityOptional,
     db: DatabaseWrapper,
@@ -141,16 +141,14 @@ pub async fn get_activities(
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(
-                db.get_activity(data.into_inner(), target_user.id).await?,
-            ));
+            return Ok(web::Json(db.get_activity(data, target_user.id).await?));
         } else {
             return Err(TimeError::UserNotFound);
         };
     };
 
     let data = if path.0 == "@me" {
-        db.get_activity(data.into_inner(), user.id).await?
+        db.get_activity(data, user.id).await?
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
@@ -163,7 +161,7 @@ pub async fn get_activities(
             || target_user.is_public
             || db.are_friends(user.id, target_user.id).await?
         {
-            db.get_activity(data.into_inner(), target_user.id).await?
+            db.get_activity(data, target_user.id).await?
         } else {
             return Err(TimeError::Unauthorized);
         }

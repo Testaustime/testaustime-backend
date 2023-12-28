@@ -32,7 +32,6 @@ fn init_test_services(cfg: &mut ServiceConfig) {
     );
 
     let heartbeat_store = Data::new(crate::api::activity::HeartBeatMemoryStore::new());
-    let leaderboard_cache = Data::new(crate::api::leaderboards::LeaderboardCache::new());
 
     let secured_access_token_storage = Data::new(crate::SecuredAccessTokenStorage::new());
 
@@ -115,8 +114,7 @@ fn init_test_services(cfg: &mut ServiceConfig) {
                 }
             }),
     )
-    .app_data(Data::clone(&heartbeat_store))
-    .app_data(Data::clone(&leaderboard_cache));
+    .app_data(Data::clone(&heartbeat_store));
     #[cfg(feature = "testausid")]
     {
         cfg.app_data(Data::new(client));
