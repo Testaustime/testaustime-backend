@@ -1,17 +1,13 @@
 use actix_web::{
     error::*,
-    web::{self, Data, Json, Path},
+    web::{self, Json, Path},
     HttpResponse, Responder,
 };
-use dashmap::DashMap;
 use diesel::result::DatabaseErrorKind;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::auth::SecuredUserIdentity,
-    database::DatabaseWrapper,
-    error::TimeError,
-    models::{PrivateLeaderboard, UserId},
+    api::auth::SecuredUserIdentity, database::DatabaseWrapper, error::TimeError, models::UserId,
 };
 
 #[derive(Deserialize, Serialize)]
@@ -28,13 +24,6 @@ pub struct LeaderboardInvite {
 pub struct LeaderboardUser {
     pub user: String,
 }
-
-pub struct CachedLeaderboard {
-    pub board: PrivateLeaderboard,
-    pub valid_until: chrono::DateTime<chrono::Utc>,
-}
-
-pub type LeaderboardCache = DashMap<i32, CachedLeaderboard>;
 
 #[post("/leaderboards/create")]
 pub async fn create_leaderboard(
@@ -71,37 +60,17 @@ pub async fn get_leaderboard(
     user: UserId,
     path: Path<(String,)>,
     db: DatabaseWrapper,
-    cache: Data<LeaderboardCache>,
 ) -> Result<impl Responder, TimeError> {
-    let name = path.0.clone();
-    if let Ok(lid) = db.get_leaderboard_id_by_name(name).await {
-        if db.is_leaderboard_member(user.id, lid).await? {
-            if let Some(cached_leaderboard) = cache.get(&lid) {
-                if cached_leaderboard.value().valid_until > chrono::Utc::now() {
-                    return Ok(web::Json(cached_leaderboard.board.to_owned()));
-                } else {
-                    drop(cached_leaderboard);
-                    cache.remove(&lid);
-                }
-            }
-            let board = db.get_leaderboard(path.0.clone()).await?;
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-            cache.insert(
-                lid,
-                CachedLeaderboard {
-                    board: board.clone(),
-                    valid_until: chrono::Utc::now() + chrono::Duration::minutes(5),
-                },
-            );
-
-            Ok(web::Json(board))
-        } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
-        }
+    if db.is_leaderboard_member(user.id, lid).await? {
+        let board = db.get_leaderboard(path.0.clone()).await?;
+        Ok(web::Json(board))
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }
 
@@ -111,18 +80,16 @@ pub async fn delete_leaderboard(
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    let name = path.0.clone();
-    if let Ok(lid) = db.get_leaderboard_id_by_name(name).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await? {
-            db.delete_leaderboard(path.0.clone()).await?;
-            Ok(HttpResponse::Ok().finish())
-        } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
-        }
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
+
+    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+        db.delete_leaderboard(path.0.clone()).await?;
+        Ok(HttpResponse::Ok().finish())
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }
 
@@ -162,24 +129,24 @@ pub async fn leave_leaderboard(
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await?
-            && db.get_leaderboard_admin_count(lid).await? == 1
-        {
-            return Err(TimeError::LastAdmin);
-        }
-        let left = db
-            .remove_user_from_leaderboard(lid, user.identity.id)
-            .await?;
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-        if left {
-            Ok(HttpResponse::Ok().finish())
-        } else {
-            Err(TimeError::NotMember)
-        }
+    if db.is_leaderboard_admin(user.identity.id, lid).await?
+        && db.get_leaderboard_admin_count(lid).await? == 1
+    {
+        return Err(TimeError::LastAdmin);
+    }
+
+    if db
+        .remove_user_from_leaderboard(lid, user.identity.id)
+        .await?
+    {
+        Ok(HttpResponse::Ok().finish())
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::NotMember)
     }
 }
 
@@ -190,29 +157,28 @@ pub async fn promote_member(
     db: DatabaseWrapper,
     promotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await? {
-            if let Ok(newadmin) = db.get_user_by_name(promotion.user.clone()).await {
-                if db
-                    .promote_user_to_leaderboard_admin(lid, newadmin.id)
-                    .await?
-                {
-                    Ok(HttpResponse::Ok().finish())
-                } else {
-                    // FIXME: This is not correct
-                    Err(TimeError::NotMember)
-                }
-            } else {
-                error!("{}", TimeError::UserNotFound);
-                Err(TimeError::UserNotFound)
-            }
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
+
+    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+        let newadmin = db
+            .get_user_by_name(promotion.user.clone())
+            .await
+            .map_err(|_| TimeError::UserNotFound)?;
+
+        if db
+            .promote_user_to_leaderboard_admin(lid, newadmin.id)
+            .await?
+        {
+            Ok(HttpResponse::Ok().finish())
         } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
+            // FIXME: This is not correct
+            Err(TimeError::NotMember)
         }
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }
 
@@ -223,29 +189,28 @@ pub async fn demote_member(
     db: DatabaseWrapper,
     demotion: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await? {
-            if let Ok(oldadmin) = db.get_user_by_name(demotion.user.clone()).await {
-                if db
-                    .demote_user_to_leaderboard_member(lid, oldadmin.id)
-                    .await?
-                {
-                    Ok(HttpResponse::Ok().finish())
-                } else {
-                    // FIXME: This is not correct
-                    Err(TimeError::NotMember)
-                }
-            } else {
-                error!("{}", TimeError::UserNotFound);
-                Err(TimeError::UserNotFound)
-            }
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
+
+    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+        let oldadmin = db
+            .get_user_by_name(demotion.user.clone())
+            .await
+            .map_err(|_| TimeError::UserNotFound)?;
+
+        if db
+            .demote_user_to_leaderboard_member(lid, oldadmin.id)
+            .await?
+        {
+            Ok(HttpResponse::Ok().finish())
         } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
+            // FIXME: This is not correct
+            Err(TimeError::NotMember)
         }
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }
 
@@ -256,25 +221,23 @@ pub async fn kick_member(
     db: DatabaseWrapper,
     kick: Json<LeaderboardUser>,
 ) -> Result<impl Responder, TimeError> {
-    if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await? {
-            if let Ok(kmember) = db.get_user_by_name(kick.user.clone()).await {
-                if db.remove_user_from_leaderboard(lid, kmember.id).await? {
-                    Ok(HttpResponse::Ok().finish())
-                } else {
-                    Err(TimeError::NotMember)
-                }
-            } else {
-                error!("{}", TimeError::UserNotFound);
-                Err(TimeError::UserNotFound)
-            }
-        } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
-        }
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
+
+    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+        let kmember = db
+            .get_user_by_name(kick.user.clone())
+            .await
+            .map_err(|_| TimeError::UserNotFound)?;
+
+        db.remove_user_from_leaderboard(lid, kmember.id)
+            .await
+            .map_err(|_| TimeError::NotMember)?;
+        Ok(HttpResponse::Ok().finish())
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }
 
@@ -284,16 +247,15 @@ pub async fn regenerate_invite(
     path: Path<(String,)>,
     db: DatabaseWrapper,
 ) -> Result<impl Responder, TimeError> {
-    if let Ok(lid) = db.get_leaderboard_id_by_name(path.0.clone()).await {
-        if db.is_leaderboard_admin(user.identity.id, lid).await? {
-            let code = db.regenerate_leaderboard_invite(lid).await?;
-            Ok(web::Json(json!({ "invite_code": code })))
-        } else {
-            error!("{}", TimeError::Unauthorized);
-            Err(TimeError::Unauthorized)
-        }
+    let lid = db
+        .get_leaderboard_id_by_name(path.0.clone())
+        .await
+        .map_err(|_| TimeError::LeaderboardNotFound)?;
+
+    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+        let code = db.regenerate_leaderboard_invite(lid).await?;
+        Ok(web::Json(json!({ "invite_code": code })))
     } else {
-        error!("{}", TimeError::LeaderboardNotFound);
-        Err(TimeError::LeaderboardNotFound)
+        Err(TimeError::Unauthorized)
     }
 }

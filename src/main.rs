@@ -102,7 +102,6 @@ async fn main() -> std::io::Result<()> {
     );
 
     let heartbeat_store = Data::new(api::activity::HeartBeatMemoryStore::new());
-    let leaderboard_cache = Data::new(api::leaderboards::LeaderboardCache::new());
 
     let secured_access_token_storage = Data::new(SecuredAccessTokenStorage::new());
 
@@ -182,7 +181,6 @@ async fn main() -> std::io::Result<()> {
                     scope
                 }
             })
-            .app_data(Data::clone(&leaderboard_cache))
             .app_data(Data::clone(&database))
             .app_data(Data::clone(&heartbeat_store));
         #[cfg(feature = "testausid")]
