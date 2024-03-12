@@ -727,7 +727,8 @@ curl --request POST 'https://api.testaustime.fi/activity/update' \
     "language": "Python",
     "hostname": "Hostname1",
     "editor_name": "IntelliJ",
-    "project_name": "example_project"
+    "project_name": "example_project",
+    "hidden": false
 }'
 ```
 
@@ -747,7 +748,8 @@ curl --request POST 'https://api.testaustime.fi/activity/update' \
     "language": "Python",
     "hostname": "Hostname1",
     "editor_name": "IntelliJ",
-    "project_name": "example_project"
+    "project_name": "example_project",
+    "hidden": false
 }'
 ```
 
