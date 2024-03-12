@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 use crate::{
     error::TimeError,
     models::*,
-    requests::{DataRequest, HeartBeat}
+    requests::{DataRequest, HeartBeat},
 };
 
 impl super::DatabaseWrapper {
@@ -82,7 +82,7 @@ impl super::DatabaseWrapper {
 
         let mut conn = self.db.get().await?;
         let mut activities = query.load::<CodingActivity>(&mut conn).await?;
-        
+
         // Change hidden entries project name
         if is_self == false {
             for act in &mut activities {

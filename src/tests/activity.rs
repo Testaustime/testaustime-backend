@@ -217,17 +217,26 @@ async fn hidden_works() {
         "Getting secured access token failed"
     );
     let sat: SecuredAccessTokenResponse = test::read_body_json(resp).await;
-    
+
     let change = json!({"public_profile": true});
     let resp = request_auth!(app, addr, post, "/account/settings", sat.token, change);
 
     assert!(resp.status().is_success(), "Making profile public failed");
 
-    let resp = request!(app, addr, get, "/users/activeuser3/activity/data", user.auth_token);
+    let resp = request!(
+        app,
+        addr,
+        get,
+        "/users/activeuser3/activity/data",
+        user.auth_token
+    );
     let data: Vec<serde_json::Value> = test::read_body_json(resp).await;
 
     assert!(!data.is_empty(), "Session should be saved after a flush");
-    assert!(data[0].get("project_name").unwrap_or(&json!("not_empty")) == &json!(""), "Activity project name should be empty string");
+    assert!(
+        data[0].get("project_name").unwrap_or(&json!("not_empty")) == &json!(""),
+        "Activity project name should be empty string"
+    );
 
     let resp = request!(app, addr, delete, "/users/@me/delete", body);
     assert!(resp.status().is_success(), "Failed to delete user");

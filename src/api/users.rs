@@ -150,7 +150,9 @@ pub async fn get_activities(
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(db.get_activity(data, target_user.id, false).await?));
+            return Ok(web::Json(
+                db.get_activity(data, target_user.id, false).await?,
+            ));
         } else {
             return Err(TimeError::UserNotFound);
         };
@@ -170,7 +172,8 @@ pub async fn get_activities(
             || target_user.is_public
             || db.are_friends(user.id, target_user.id).await?
         {
-            db.get_activity(data, target_user.id, target_user.id == user.id).await?
+            db.get_activity(data, target_user.id, target_user.id == user.id)
+                .await?
         } else {
             return Err(TimeError::Unauthorized);
         }
