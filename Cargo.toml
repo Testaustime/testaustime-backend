@@ -13,7 +13,7 @@ testausid = ["dep:awc"]
 lto = true
 
 [dependencies]
-actix-web = { version = "4.2.1", features = ["macros", "rustls"] }
+actix-web = { version = "4.5.1", features = ["macros", "rustls"] }
 awc = { version = "3.0.0", features = ["rustls"], optional = true }
 actix-cors = "0.6"
 http = "0.2"

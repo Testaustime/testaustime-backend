@@ -71,8 +71,11 @@ pub async fn get_current_activity(
     db: DatabaseWrapper,
     heartbeats: Data<HeartBeatMemoryStore>,
 ) -> Result<impl Responder, TimeError> {
+    let mut is_self: bool = false;
     let target_user = if let Some(user) = opt_user.identity {
         if path.0 == "@me" {
+            is_self = true;
+
             user.id
         } else {
             let target_user = db
@@ -84,6 +87,7 @@ pub async fn get_current_activity(
                 || target_user.is_public
                 || db.are_friends(user.id, target_user.id).await?
             {
+                is_self = target_user.id == user.id;
                 target_user.id
             } else {
                 return Err(TimeError::Unauthorized);
@@ -115,11 +119,16 @@ pub async fn get_current_activity(
                 heartbeats.remove(&target_user);
                 Err(TimeError::NotActive)
             } else {
-                let current_heartbeat = CurrentActivity {
+                let mut current_heartbeat = CurrentActivity {
                     started: start,
                     duration: duration.num_seconds(),
                     heartbeat: inner_heartbeat,
                 };
+
+                if !is_self && current_heartbeat.heartbeat.hidden == Some(true) {
+                    current_heartbeat.heartbeat.project_name = Some("".to_string());
+                }
+
                 Ok(web::Json(Some(current_heartbeat)))
             }
         }
@@ -141,14 +150,14 @@ pub async fn get_activities(
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(db.get_activity(data, target_user.id).await?));
+            return Ok(web::Json(db.get_activity(data, target_user.id, false).await?));
         } else {
             return Err(TimeError::UserNotFound);
         };
     };
 
     let data = if path.0 == "@me" {
-        db.get_activity(data, user.id).await?
+        db.get_activity(data, user.id, true).await?
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
@@ -161,7 +170,7 @@ pub async fn get_activities(
             || target_user.is_public
             || db.are_friends(user.id, target_user.id).await?
         {
-            db.get_activity(data, target_user.id).await?
+            db.get_activity(data, target_user.id, target_user.id == user.id).await?
         } else {
             return Err(TimeError::Unauthorized);
         }

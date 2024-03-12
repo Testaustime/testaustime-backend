@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 use crate::{
     error::TimeError,
     models::*,
-    requests::{DataRequest, HeartBeat},
+    requests::{DataRequest, HeartBeat}
 };
 
 impl super::DatabaseWrapper {
@@ -24,6 +24,7 @@ impl super::DatabaseWrapper {
             language: heartbeat.language,
             editor_name: heartbeat.editor_name,
             hostname: heartbeat.hostname,
+            hidden: heartbeat.hidden.unwrap_or(false),
         };
 
         let mut conn = self.db.get().await?;
@@ -42,6 +43,7 @@ impl super::DatabaseWrapper {
         let mut conn = self.db.get().await?;
 
         use crate::schema::coding_activities::dsl::*;
+
         Ok(coding_activities
             .filter(user_id.eq(user))
             .load::<CodingActivity>(&mut conn)
@@ -52,6 +54,7 @@ impl super::DatabaseWrapper {
         &self,
         request: DataRequest,
         user: i32,
+        is_self: bool,
     ) -> Result<Vec<CodingActivity>, TimeError> {
         use crate::schema::coding_activities::dsl::*;
         let mut query = coding_activities.into_boxed().filter(user_id.eq(user));
@@ -78,7 +81,19 @@ impl super::DatabaseWrapper {
         };
 
         let mut conn = self.db.get().await?;
-        Ok(query.load::<CodingActivity>(&mut conn).await?)
+        let mut activities = query.load::<CodingActivity>(&mut conn).await?;
+        
+        // Change hidden entries project name
+        if is_self == false {
+            for act in &mut activities {
+                if act.hidden {
+                    // Empty string instead of None() to make sure we don't make everything into "undefined" :D
+                    act.project_name = Some("".to_string());
+                }
+            }
+        }
+
+        Ok(activities)
     }
 
     pub async fn get_user_coding_time_since(
@@ -137,6 +152,23 @@ impl super::DatabaseWrapper {
             .filter(user_id.eq(target_user_id))
             .filter(project_name.eq(from))
             .set(project_name.eq(to))
+            .execute(&mut conn)
+            .await?)
+    }
+
+    pub async fn set_project_hidden(
+        &self,
+        target_user_id: i32,
+        target_project: String,
+        to: bool,
+    ) -> Result<usize, TimeError> {
+        let mut conn = self.db.get().await?;
+
+        use crate::schema::coding_activities::dsl::*;
+        Ok(diesel::update(coding_activities)
+            .filter(user_id.eq(target_user_id))
+            .filter(project_name.eq(target_project))
+            .set(hidden.eq(to))
             .execute(&mut conn)
             .await?)
     }

@@ -69,8 +69,11 @@ pub async fn get_friends(
             username: fwt.user.username,
             coding_time: fwt.coding_time,
             status: heartbeats.get(&fwt.user.id).map(|heartbeat| {
-                let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+                let (mut inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                 drop(heartbeat);
+                if inner_heartbeat.hidden == Some(true) {
+                    inner_heartbeat.project_name = Some("".to_string());
+                }
                 CurrentActivity {
                     started: start_time,
                     duration: duration.num_seconds(),
