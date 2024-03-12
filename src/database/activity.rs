@@ -84,7 +84,7 @@ impl super::DatabaseWrapper {
         let mut activities = query.load::<CodingActivity>(&mut conn).await?;
 
         // Change hidden entries project name
-        if is_self == false {
+        if !is_self {
             for act in &mut activities {
                 if act.hidden {
                     // Empty string instead of None() to make sure we don't make everything into "undefined" :D
