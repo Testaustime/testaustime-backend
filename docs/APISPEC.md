@@ -980,7 +980,8 @@ curl --request POST 'https://api.testaustime.fi/friends/add' \
             "project_name": "My Project",
             "language": "javascript",
             "editor_name": "vscode",
-            "hostname": "mylaptop"
+            "hostname": "mylaptop",
+            "hidden": false
         }
     }
 }
@@ -1035,7 +1036,8 @@ curl --request GET ''https://api.testaustime.fi/friends/list' \
                 "project_name": "My Project",
                 "language": "javascript",
                 "editor_name": "vscode",
-                "hostname": "mylaptop"
+                "hostname": "mylaptop",
+                "hidden": true
             }
         }
     }

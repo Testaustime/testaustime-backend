@@ -39,8 +39,11 @@ pub async fn add_friend(
                 username: friend.username.clone(),
                 coding_time: db.get_coding_time_steps(friend.id).await,
                 status: heartbeats.get(&friend.id).map(|heartbeat| {
-                    let (inner_heartbeat, start_time, duration) = heartbeat.to_owned();
+                    let (mut inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                     drop(heartbeat);
+                    if inner_heartbeat.hidden == Some(true) {
+                        inner_heartbeat.project_name = Some("".to_string());
+                    }
                     CurrentActivity {
                         started: start_time,
                         duration: duration.num_seconds(),
