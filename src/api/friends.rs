@@ -42,7 +42,7 @@ pub async fn add_friend(
                     let (mut inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                     drop(heartbeat);
                     if inner_heartbeat.hidden == Some(true) {
-                        inner_heartbeat.project_name = Some("".to_string());
+                        inner_heartbeat.project_name = Some(String::from("hidden"));
                     }
                     CurrentActivity {
                         started: start_time,
@@ -75,7 +75,7 @@ pub async fn get_friends(
                 let (mut inner_heartbeat, start_time, duration) = heartbeat.to_owned();
                 drop(heartbeat);
                 if inner_heartbeat.hidden == Some(true) {
-                    inner_heartbeat.project_name = Some("".to_string());
+                    inner_heartbeat.project_name = Some(String::from("hidden"));
                 }
                 CurrentActivity {
                     started: start_time,

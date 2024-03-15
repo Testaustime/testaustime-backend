@@ -126,7 +126,7 @@ pub async fn get_current_activity(
                 };
 
                 if !is_self && current_heartbeat.heartbeat.hidden == Some(true) {
-                    current_heartbeat.heartbeat.project_name = Some("".to_string());
+                    current_heartbeat.heartbeat.project_name = Some(String::from("hidden"));
                 }
 
                 Ok(web::Json(Some(current_heartbeat)))

@@ -87,8 +87,7 @@ impl super::DatabaseWrapper {
         if !is_self {
             for act in &mut activities {
                 if act.hidden {
-                    // Empty string instead of None() to make sure we don't make everything into "undefined" :D
-                    act.project_name = Some("".to_string());
+                    act.project_name = Some(String::from("hidden"));
                 }
             }
         }
