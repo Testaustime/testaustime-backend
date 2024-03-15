@@ -6,10 +6,15 @@ diesel::table! {
         user_id -> Int4,
         start_time -> Timestamp,
         duration -> Int4,
+        #[max_length = 64]
         project_name -> Nullable<Varchar>,
+        #[max_length = 32]
         language -> Nullable<Varchar>,
+        #[max_length = 32]
         editor_name -> Nullable<Varchar>,
+        #[max_length = 32]
         hostname -> Nullable<Varchar>,
+        hidden -> Bool,
     }
 }
 
@@ -33,7 +38,9 @@ diesel::table! {
 diesel::table! {
     leaderboards (id) {
         id -> Int4,
+        #[max_length = 32]
         name -> Varchar,
+        #[max_length = 32]
         invite_code -> Varchar,
         creation_time -> Timestamp,
     }
@@ -60,8 +67,11 @@ diesel::table! {
 diesel::table! {
     user_identities (id) {
         id -> Int4,
+        #[max_length = 32]
         auth_token -> Bpchar,
+        #[max_length = 24]
         friend_code -> Bpchar,
+        #[max_length = 32]
         username -> Varchar,
         registration_time -> Timestamp,
         is_public -> Bool,

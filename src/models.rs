@@ -147,6 +147,7 @@ pub struct CodingActivity {
     pub language: Option<String>,
     pub editor_name: Option<String>,
     pub hostname: Option<String>,
+    pub hidden: bool,
 }
 
 use crate::schema::coding_activities;
@@ -161,6 +162,7 @@ pub struct NewCodingActivity {
     pub language: Option<String>,
     pub editor_name: Option<String>,
     pub hostname: Option<String>,
+    pub hidden: bool,
 }
 
 #[derive(Queryable, Clone, Debug, Serialize, Hash, Eq, PartialEq, Identifiable)]

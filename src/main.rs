@@ -144,6 +144,7 @@ async fn main() -> std::io::Result<()> {
                             .service(api::activity::delete)
                             .service(api::activity::flush)
                             .service(api::activity::rename_project)
+                            .service(api::activity::hide_project)
                     })
                     .service(api::auth::login)
                     .service(api::auth::regenerate)
