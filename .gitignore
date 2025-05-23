@@ -2,3 +2,6 @@ target
 */target
 .env
 settings.toml
+result
+.direnv
+.devenv

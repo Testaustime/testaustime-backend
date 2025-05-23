@@ -1,0 +1,87 @@
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    systems.url = "github:nix-systems/default";
+    devenv.url = "github:cachix/devenv";
+    devenv.inputs.nixpkgs.follows = "nixpkgs";
+
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    crane.url = "github:ipetkov/crane";
+  };
+
+  outputs =
+    {
+      self,
+      nixpkgs,
+      devenv,
+      systems,
+      fenix,
+      crane,
+      ...
+    }@inputs:
+    let
+      forEachSystem = nixpkgs.lib.genAttrs (import systems);
+    in
+    {
+      packages = forEachSystem (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+
+          toolchain = fenix.packages.${system}.minimal.toolchain;
+
+          craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
+        in
+        rec {
+          devenv-up = self.devShells.${system}.default.config.procfileScript;
+          devenv-test = self.devShells.${system}.default.config.test;
+
+          testaustime-backend = craneLib.buildPackage {
+            src = ./.;
+            # The tests don't work currently
+            doCheck = false;
+          };
+
+          default = testaustime-backend;
+
+          docker = pkgs.dockerTools.buildLayeredImage {
+            name = "ghcr.io/testaustime/testaustime-backend";
+            tag = "nix";
+            config.Cmd =
+              let
+                entrypoint = pkgs.writeShellScriptBin "entrypoint.sh" ''
+                  while [ 1 ];
+                  do
+                      ${pkgs.diesel-cli}/bin/diesel database setup --migration-dir ${./migrations} && break;
+                  done
+                  ${testaustime-backend}/bin/testaustime
+                '';
+              in
+              [ "./${entrypoint}/bin/entrypoint.sh" ];
+          };
+        }
+      );
+
+      devShells = forEachSystem (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = devenv.lib.mkShell {
+            inherit inputs pkgs;
+            modules = [
+              {
+                languages.rust.enable = true;
+
+                packages = [ self.outputs.packages.${system}.testaustime-backend ];
+              }
+            ];
+          };
+        }
+      );
+    };
+}
