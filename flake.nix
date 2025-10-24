@@ -34,16 +34,55 @@
           toolchain = fenix.packages.${system}.minimal.toolchain;
 
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
+
+          commonArgs = {
+            src = craneLib.cleanCargoSource ./.;
+          };
+
+          cargoArtifacts = craneLib.buildDepsOnly (
+            commonArgs
+            // {
+              doCheck = false;
+            }
+          );
         in
         rec {
           devenv-up = self.devShells.${system}.default.config.procfileScript;
           devenv-test = self.devShells.${system}.default.config.test;
 
-          testaustime-backend = craneLib.buildPackage {
-            src = ./.;
-            # The tests don't work currently
-            doCheck = false;
-          };
+          testaustime-backend = craneLib.buildPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+
+              nativeBuildInputs = [
+                pkgs.postgresql
+                pkgs.diesel-cli
+              ];
+
+              checkInputs = [
+                pkgs.postgresql
+                pkgs.diesel-cli
+              ];
+
+              preCheck = ''
+                # Set up a temporary PostgreSQL database
+                export PGDATA=$(mktemp -d)
+                export PGHOST=$PGDATA
+
+                initdb -U postgres
+                pg_ctl start -o "-k $PGDATA -h \"\""
+
+                # Create your test database
+                createdb -U postgres test_db
+
+                # Set environment variables your tests expect
+                export TEST_DATABASE="postgresql://postgres@localhost/test_db?host=$PGDATA"
+
+                diesel database setup --database-url "$TEST_DATABASE" --migration-dir ${./migrations}
+              '';
+            }
+          );
 
           default = testaustime-backend;
 
