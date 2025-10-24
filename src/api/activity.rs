@@ -82,9 +82,7 @@ pub async fn update(
                         user.id,
                         (heartbeat, Local::now().naive_local(), Duration::seconds(0)),
                     );
-                    Ok(Json(UpdateResponse {
-                        duration: 0,
-                    }))
+                    Ok(Json(UpdateResponse { duration: 0 }))
                 } else {
                     // Extend current coding session if heartbeat matches and it has been under the maximum duration of a break
                     heartbeats.insert(
@@ -92,7 +90,7 @@ pub async fn update(
                         (heartbeat, start, curtime.signed_duration_since(start)),
                     );
                     Ok(Json(UpdateResponse {
-                        duration: curtime.signed_duration_since(start).num_seconds()
+                        duration: curtime.signed_duration_since(start).num_seconds(),
                     }))
                 }
             } else {
@@ -109,9 +107,7 @@ pub async fn update(
                     (heartbeat, Local::now().naive_local(), Duration::seconds(0)),
                 );
 
-                Ok(Json(UpdateResponse {
-                    duration: 0
-                }))
+                Ok(Json(UpdateResponse { duration: 0 }))
             }
         }
         None => {
@@ -120,9 +116,7 @@ pub async fn update(
                 user.id,
                 (heartbeat, Local::now().naive_local(), Duration::seconds(0)),
             );
-            Ok(Json(UpdateResponse {
-                duration: 0,
-            }))
+            Ok(Json(UpdateResponse { duration: 0 }))
         }
     }
 }
@@ -152,12 +146,7 @@ pub async fn delete(
     db: DatabaseWrapper,
     Json(body): Json<ActivityDeleteRequest>,
 ) -> Result<impl IntoResponse, TimeError> {
-    let deleted = db
-        .delete_activity(
-            user.identity.id,
-            body.id,
-        )
-        .await?;
+    let deleted = db.delete_activity(user.identity.id, body.id).await?;
     if deleted {
         Ok(StatusCode::OK)
     } else {
