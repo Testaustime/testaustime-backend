@@ -3,7 +3,7 @@ use serde_json::json;
 use super::{macros::*, *};
 use crate::{
     api::leaderboards::{LeaderboardInvite, LeaderboardName},
-    models::{NewUserIdentity, PrivateLeaderboard, SecuredAccessTokenResponse},
+    models::{NewUserIdentity, PrivateLeaderboard},
 };
 
 #[tokio::test]
@@ -66,14 +66,7 @@ async fn creation_joining_and_deletion() {
         "Leaderboard member count should be 2"
     );
 
-    let resp = request!(app, POST, "/auth/securedaccess", owner_body);
-    assert!(
-        resp.status().is_success(),
-        "Getting secured access token failed"
-    );
-    let sat: SecuredAccessTokenResponse = body_to_json(resp).await;
-
-    let resp = request_auth!(app, DELETE, "/leaderboards/board", sat.token);
+    let resp = request_auth!(app, DELETE, "/leaderboards/board", owner.auth_token);
     assert!(resp.status().is_success(), "Leaderboards deletion failed");
 
     let resp = request_auth!(app, GET, "/leaderboards/board", member.auth_token);

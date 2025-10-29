@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::{macros::*, *};
-use crate::models::{NewUserIdentity, SecuredAccessTokenResponse};
+use crate::models::NewUserIdentity;
 
 #[tokio::test]
 async fn public_accounts() {
@@ -28,15 +28,8 @@ async fn public_accounts() {
         "Data should be private for private accounts"
     );
 
-    let resp = request!(app, POST, "/auth/securedaccess", body);
-    assert!(
-        resp.status().is_success(),
-        "Getting secured access token failed"
-    );
-    let sat: SecuredAccessTokenResponse = body_to_json(resp).await;
-
     let change = json!({"public_profile": true});
-    let resp = request_auth!(app, POST, "/account/settings", sat.token, change);
+    let resp = request_auth!(app, POST, "/account/settings", user.auth_token, change);
 
     assert!(resp.status().is_success(), "Changing settings failed");
 

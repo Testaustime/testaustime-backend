@@ -4,7 +4,9 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    database::DatabaseWrapper, error::TimeError, models::{UserId, UserIdentity},
+    database::DatabaseWrapper,
+    error::TimeError,
+    models::{UserId, UserIdentity},
 };
 
 #[derive(Deserialize, Serialize)]
@@ -126,10 +128,7 @@ pub async fn leave_leaderboard(
         return Err(TimeError::LastAdmin);
     }
 
-    if db
-        .remove_user_from_leaderboard(lid, user.id)
-        .await?
-    {
+    if db.remove_user_from_leaderboard(lid, user.id).await? {
         Ok(StatusCode::OK)
     } else {
         Err(TimeError::NotMember)

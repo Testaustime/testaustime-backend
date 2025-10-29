@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde_json::json;
 
 use super::{macros::*, *};
-use crate::models::{CurrentActivity, HeartBeat, NewUserIdentity, SecuredAccessTokenResponse};
+use crate::models::{CurrentActivity, HeartBeat, NewUserIdentity};
 
 #[tokio::test]
 async fn updating_activity_works() {
@@ -157,15 +157,8 @@ async fn hidden_project() {
     let resp = request_auth!(app, POST, "/activity/flush", user.auth_token);
     assert!(resp.status().is_success(), "Flushing should work");
 
-    let resp = request!(app, POST, "/auth/securedaccess", body);
-    assert!(
-        resp.status().is_success(),
-        "Getting secured access token failed"
-    );
-    let sat: SecuredAccessTokenResponse = body_to_json(resp).await;
-
     let change = json!({"public_profile": true});
-    let resp = request_auth!(app, POST, "/account/settings", sat.token, change);
+    let resp = request_auth!(app, POST, "/account/settings", user.auth_token, change);
 
     assert!(resp.status().is_success(), "Making profile public failed");
 

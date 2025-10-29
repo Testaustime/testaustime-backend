@@ -15,8 +15,7 @@ pub async fn change_settings(
     settings: Json<Settings>,
 ) -> Result<impl IntoResponse, TimeError> {
     if let Some(public_profile) = settings.public_profile {
-        db.change_visibility(user.id, public_profile)
-            .await?;
+        db.change_visibility(user.id, public_profile).await?;
     };
 
     Ok(StatusCode::OK)

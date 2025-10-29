@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::{macros::*, *};
-use crate::models::{NewUserIdentity, SecuredAccessTokenResponse, SelfUser};
+use crate::models::{NewUserIdentity, SelfUser};
 
 #[tokio::test]
 async fn register_and_delete() {
@@ -48,14 +48,6 @@ async fn login_change_username_and_password() {
         "Auth tokens should be equal"
     );
 
-    let resp = request!(app, POST, "/auth/securedaccess", body);
-    assert!(
-        resp.status().is_success(),
-        "Getting secured access token failed"
-    );
-
-    let sat: SecuredAccessTokenResponse = body_to_json(resp).await;
-
     let change_request = json!({
         "new": "testuser3"
     });
@@ -76,7 +68,7 @@ async fn login_change_username_and_password() {
         app,
         POST,
         "/auth/change-username",
-        sat.token,
+        user.auth_token,
         change_request
     );
     assert!(resp.status().is_success(), "Username change failed");

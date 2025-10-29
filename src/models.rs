@@ -250,11 +250,6 @@ pub struct FriendWithTimeAndStatus {
     pub status: Option<CurrentActivity>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct SecuredAccessTokenResponse {
-    pub token: String,
-}
-
 #[derive(Deserialize, Serialize, Debug, Hash, Eq, PartialEq, Clone)]
 pub struct HeartBeat {
     #[serde(deserialize_with = "project_deserialize")]
