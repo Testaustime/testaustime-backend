@@ -6,10 +6,10 @@ use http::StatusCode;
 use serde::Deserialize;
 
 use crate::{
-    api::{activity::HeartBeatMemoryStore, auth::SecuredUserIdentity},
+    api::activity::HeartBeatMemoryStore,
     database::DatabaseWrapper,
     error::TimeError,
-    models::{CurrentActivity, FriendWithTimeAndStatus, UserId},
+    models::{CurrentActivity, FriendWithTimeAndStatus, UserId, UserIdentity},
 };
 
 #[derive(Deserialize, Debug)]
@@ -93,10 +93,10 @@ pub async fn get_friends(
 }
 
 pub async fn regenerate_friend_code(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
 ) -> Result<impl IntoResponse, TimeError> {
-    db.regenerate_friend_code(user.identity.id)
+    db.regenerate_friend_code(user.id)
         .await
         .inspect_err(|e| error!("{}", e))
         .map(|code| Json(json!({ "friend_code": code })))
@@ -108,12 +108,12 @@ pub struct RemoveFriendRequest {
 }
 
 pub async fn remove(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
     Json(body): Json<RemoveFriendRequest>,
 ) -> Result<impl IntoResponse, TimeError> {
     let friend = db.get_user_by_name(&body.name).await?;
-    let deleted = db.remove_friend(user.identity.id, friend.id).await?;
+    let deleted = db.remove_friend(user.id, friend.id).await?;
 
     if deleted {
         Ok(StatusCode::OK)

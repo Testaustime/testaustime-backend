@@ -4,19 +4,13 @@ use axum::extract::FromRef;
 use lettre::{AsyncSmtpTransport, Tokio1Executor};
 
 use crate::{
-    api::activity::HeartBeatMemoryStore, auth::secured_access::SecuredAccessTokenStorage,
+    api::activity::HeartBeatMemoryStore,
     PasswordResetState, RegisterLimiter, TestaustimeState,
 };
 
 impl FromRef<TestaustimeState> for Arc<HeartBeatMemoryStore> {
     fn from_ref(input: &TestaustimeState) -> Self {
         Arc::clone(&input.heartbeat_store)
-    }
-}
-
-impl FromRef<TestaustimeState> for Arc<SecuredAccessTokenStorage> {
-    fn from_ref(input: &TestaustimeState) -> Self {
-        Arc::clone(&input.secured_access_storage)
     }
 }
 

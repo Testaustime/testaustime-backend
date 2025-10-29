@@ -46,16 +46,6 @@ impl super::DatabaseWrapper {
             > 0)
     }
 
-    pub async fn get_user_by_id(&self, userid: i32) -> Result<UserIdentity, TimeError> {
-        let mut conn = self.db.get().await?;
-        use crate::schema::user_identities::dsl::*;
-
-        Ok(user_identities
-            .find(userid)
-            .first::<UserIdentity>(&mut conn)
-            .await?)
-    }
-
     pub async fn verify_user_password(
         &self,
         arg_username: &str,
@@ -85,21 +75,6 @@ impl super::DatabaseWrapper {
         } else {
             Ok(None)
         }
-    }
-
-    pub async fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {
-        let mut conn = self.db.get().await?;
-
-        let token = crate::utils::generate_auth_token();
-
-        use crate::schema::user_identities::dsl::*;
-
-        diesel::update(user_identities.find(userid))
-            .set(auth_token.eq(&token))
-            .execute(&mut conn)
-            .await?;
-
-        Ok(token)
     }
 
     pub async fn new_testaustime_user(

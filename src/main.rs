@@ -14,7 +14,7 @@ mod tests;
 use std::{net::SocketAddr, num::NonZeroU32, sync::Arc};
 
 use api::activity::HeartBeatMemoryStore;
-use auth::{secured_access::SecuredAccessTokenStorage, AuthMiddleware, Authentication};
+use auth::{AuthMiddleware, Authentication};
 use axum::{
     body::Body,
     routing::{delete, get, post},
@@ -74,7 +74,6 @@ pub struct TestaustimeState {
     smtp: AsyncSmtpTransport<Tokio1Executor>,
     database: Arc<Database>,
     heartbeat_store: Arc<HeartBeatMemoryStore>,
-    secured_access_storage: Arc<SecuredAccessTokenStorage>,
     register_limiter: Arc<RegisterLimiter>,
     password_reset_state: Arc<PasswordResetState>,
 }
@@ -88,8 +87,6 @@ fn create_router(config: &TestaustimeConfig) -> Router {
     });
 
     let heartbeat_store = Arc::new(HeartBeatMemoryStore::new());
-
-    let secured_access_storage = Arc::new(SecuredAccessTokenStorage::new());
 
     let password_reset_state = Arc::new(PasswordResetState {
         storage: DashMap::default(),
@@ -110,7 +107,6 @@ fn create_router(config: &TestaustimeConfig) -> Router {
 
     let state = TestaustimeState {
         smtp,
-        secured_access_storage,
         heartbeat_store,
         database,
         register_limiter,
@@ -157,14 +153,9 @@ fn create_router(config: &TestaustimeConfig) -> Router {
                         .route("/hide", post(api::activity::hide_project))
                 })
                 .route("/auth/login", post(api::auth::login))
-                .route("/auth/regenerate", post(api::auth::regenerate))
                 .route("/auth/change-username", post(api::auth::change_username))
                 .route("/auth/change-email", post(api::auth::change_email))
                 .route("/auth/change-password", post(api::auth::change_password))
-                .route(
-                    "/auth/securedaccess",
-                    post(api::auth::get_secured_access_token),
-                )
                 .route(
                     "/auth/reset-password",
                     post(api::auth::request_password_reset),

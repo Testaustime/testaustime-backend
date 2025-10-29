@@ -4,7 +4,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::auth::SecuredUserIdentity, database::DatabaseWrapper, error::TimeError, models::UserId,
+    database::DatabaseWrapper, error::TimeError, models::{UserId, UserIdentity},
 };
 
 #[derive(Deserialize, Serialize)]
@@ -69,7 +69,7 @@ pub async fn get_leaderboard(
 }
 
 pub async fn delete_leaderboard(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
 ) -> Result<impl IntoResponse, TimeError> {
@@ -78,7 +78,7 @@ pub async fn delete_leaderboard(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         db.delete_leaderboard(&name).await?;
         Ok(StatusCode::OK)
     } else {
@@ -111,7 +111,7 @@ pub async fn join_leaderboard(
 }
 
 pub async fn leave_leaderboard(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
 ) -> Result<impl IntoResponse, TimeError> {
@@ -120,14 +120,14 @@ pub async fn leave_leaderboard(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await?
+    if db.is_leaderboard_admin(user.id, lid).await?
         && db.get_leaderboard_admin_count(lid).await? == 1
     {
         return Err(TimeError::LastAdmin);
     }
 
     if db
-        .remove_user_from_leaderboard(lid, user.identity.id)
+        .remove_user_from_leaderboard(lid, user.id)
         .await?
     {
         Ok(StatusCode::OK)
@@ -137,7 +137,7 @@ pub async fn leave_leaderboard(
 }
 
 pub async fn promote_member(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     promotion: Json<LeaderboardUser>,
@@ -147,7 +147,7 @@ pub async fn promote_member(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let newadmin = db
             .get_user_by_name(&promotion.user)
             .await
@@ -168,7 +168,7 @@ pub async fn promote_member(
 }
 
 pub async fn demote_member(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     demotion: Json<LeaderboardUser>,
@@ -178,7 +178,7 @@ pub async fn demote_member(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let oldadmin = db
             .get_user_by_name(&demotion.user)
             .await
@@ -199,7 +199,7 @@ pub async fn demote_member(
 }
 
 pub async fn kick_member(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     kick: Json<LeaderboardUser>,
@@ -209,7 +209,7 @@ pub async fn kick_member(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let kmember = db
             .get_user_by_name(&kick.user)
             .await
@@ -225,7 +225,7 @@ pub async fn kick_member(
 }
 
 pub async fn regenerate_invite(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
 ) -> Result<impl IntoResponse, TimeError> {
@@ -234,7 +234,7 @@ pub async fn regenerate_invite(
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let code = db.regenerate_leaderboard_invite(lid).await?;
         Ok(Json(json!({ "invite_code": code })))
     } else {

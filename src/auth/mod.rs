@@ -1,8 +1,5 @@
-pub mod secured_access;
-
 use std::{
     mem,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -16,7 +13,6 @@ use crate::{database::DatabaseWrapper, models::UserIdentity, TestaustimeState};
 pub enum Authentication {
     NoAuth,
     AuthToken(UserIdentity),
-    SecuredAccessToken(UserIdentity),
 }
 
 #[derive(Clone)]
@@ -35,7 +31,6 @@ impl Authentication {
         match self {
             Authentication::NoAuth => None,
             Authentication::AuthToken(user_identity) => Some(user_identity),
-            Authentication::SecuredAccessToken(user_identity) => Some(user_identity),
         }
     }
 }
@@ -68,7 +63,6 @@ where
 
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
         let db = DatabaseWrapper::from(&self.state.database);
-        let secured_access_storage = Arc::clone(&self.state.secured_access_storage);
         let auth = req.headers().get("Authorization").cloned();
 
         let clone = self.inner.clone();
@@ -84,14 +78,7 @@ where
                     break 'auth Authentication::NoAuth;
                 };
 
-                if let Ok(secured_access_instance) = secured_access_storage.get(token).clone() {
-                    let user = db
-                        .get_user_by_id(secured_access_instance.user_id)
-                        .await
-                        .unwrap();
-
-                    Authentication::SecuredAccessToken(user)
-                } else if let Ok(user_identity) = db.get_user_by_token(token.to_string()).await {
+                if let Ok(user_identity) = db.get_user_by_token(token.to_string()).await {
                     Authentication::AuthToken(user_identity)
                 } else {
                     Authentication::NoAuth

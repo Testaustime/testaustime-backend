@@ -7,10 +7,9 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::auth::SecuredUserIdentity,
     database::DatabaseWrapper,
     error::TimeError,
-    models::{HeartBeat, UserId},
+    models::{HeartBeat, UserId, UserIdentity},
 };
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
@@ -142,11 +141,11 @@ pub struct ActivityDeleteRequest {
 }
 
 pub async fn delete(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
     Json(body): Json<ActivityDeleteRequest>,
 ) -> Result<impl IntoResponse, TimeError> {
-    let deleted = db.delete_activity(user.identity.id, body.id).await?;
+    let deleted = db.delete_activity(user.id, body.id).await?;
     if deleted {
         Ok(StatusCode::OK)
     } else {

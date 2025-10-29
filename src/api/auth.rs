@@ -13,10 +13,10 @@ use lettre::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    auth::{secured_access::SecuredAccessTokenStorage, Authentication},
+    auth::Authentication,
     database::DatabaseWrapper,
     error::TimeError,
-    models::{SecuredAccessTokenResponse, SelfUser, UserId, UserIdentity},
+    models::{SelfUser, UserId, UserIdentity},
     utils::{generate_password_reset_token, validate_email},
     PasswordReset, PasswordResetState,
 };
@@ -78,24 +78,6 @@ impl<S: Send + Sync> FromRequestParts<S> for UserIdentity {
     }
 }
 
-pub struct SecuredUserIdentity {
-    pub identity: UserIdentity,
-}
-
-impl<S: Send + Sync> FromRequestParts<S> for SecuredUserIdentity {
-    type Rejection = TimeError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let auth = parts.extensions.get::<Authentication>().cloned().unwrap();
-
-        if let Authentication::SecuredAccessToken(user) = auth {
-            Ok(SecuredUserIdentity { identity: user })
-        } else {
-            Err(TimeError::UnauthroizedSecuredAccess)
-        }
-    }
-}
-
 pub struct UserIdentityOptional {
     pub identity: Option<UserIdentity>,
 }
@@ -137,42 +119,6 @@ pub async fn login(
     }
 }
 
-pub async fn get_secured_access_token(
-    State(secured_access_storage): State<Arc<SecuredAccessTokenStorage>>,
-    db: DatabaseWrapper,
-    data: Json<LoginRequest>,
-) -> Result<impl IntoResponse, TimeError> {
-    if data.password.len() > 128 {
-        return Err(TimeError::InvalidLength(
-            "Password cannot be longer than 128 characters".to_string(),
-        ));
-    }
-
-    if let Ok(Some(user)) = db
-        .verify_user_password(&data.username, &data.password)
-        .await
-    {
-        Ok(Json(SecuredAccessTokenResponse {
-            token: secured_access_storage.create_token(user.id),
-        }))
-    } else {
-        Err(TimeError::InvalidCredentials)
-    }
-}
-
-pub async fn regenerate(
-    user: SecuredUserIdentity,
-    db: DatabaseWrapper,
-) -> Result<impl IntoResponse, TimeError> {
-    db.regenerate_token(user.identity.id)
-        .await
-        .inspect_err(|e| error!("{}", e))
-        .map(|token| {
-            let token = json!({ "token": token });
-            Json(token)
-        })
-}
-
 pub async fn register(
     db: DatabaseWrapper,
     Json(data): Json<RegisterRequest>,
@@ -203,7 +149,7 @@ pub async fn register(
 }
 
 pub async fn change_username(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
     Json(data): Json<UsernameChangeRequest>,
 ) -> Result<impl IntoResponse, TimeError> {
@@ -217,7 +163,7 @@ pub async fn change_username(
         return Err(TimeError::BadUsername);
     }
 
-    let result = db.change_username(user.identity.id, &data.new).await;
+    let result = db.change_username(user.id, &data.new).await;
 
     if result.as_ref().is_err_and(|e| e.is_unique_violation()) {
         return Err(TimeError::UsernameTaken);
@@ -227,7 +173,7 @@ pub async fn change_username(
 }
 
 pub async fn change_email(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
     Json(data): Json<EmailChangeRequest>,
 ) -> Result<impl IntoResponse, TimeError> {
@@ -235,7 +181,7 @@ pub async fn change_email(
         return Err(TimeError::InvalidEmail);
     }
 
-    let result = db.change_email(user.identity.id, data.new).await;
+    let result = db.change_email(user.id, data.new).await;
 
     if result.as_ref().is_err_and(|e| e.is_unique_violation()) {
         return Err(TimeError::EmailTaken);
