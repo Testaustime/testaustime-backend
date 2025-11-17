@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use axum::response::IntoResponse;
 use http::StatusCode;
 use regex::Regex;
 
@@ -18,6 +17,14 @@ pub mod users;
 pub static VALID_NAME_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new("^[[:word:]]{2,32}$").unwrap());
 
-pub async fn health() -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = OK)
+    ),
+    description = "Is the api healthy"
+)]
+pub async fn health() -> StatusCode {
     StatusCode::OK
 }

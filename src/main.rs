@@ -15,11 +15,7 @@ use std::{net::SocketAddr, num::NonZeroU32, sync::Arc};
 
 use api::activity::HeartBeatMemoryStore;
 use auth::{AuthMiddleware, Authentication};
-use axum::{
-    body::Body,
-    routing::{delete, get, post},
-    Router,
-};
+use axum::{body::Body, Router};
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::Database;
@@ -31,6 +27,12 @@ use serde_derive::Deserialize;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa::{
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi,
+};
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_swagger_ui::SwaggerUi;
 
 #[macro_use]
 extern crate tracing;
@@ -78,7 +80,31 @@ pub struct TestaustimeState {
     password_reset_state: Arc<PasswordResetState>,
 }
 
-fn create_router(config: &TestaustimeConfig) -> Router {
+#[derive(OpenApi)]
+#[openapi(
+    modifiers(&SecurityAddon),
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "api_key",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("Bearer")
+                        .build(),
+                ),
+            )
+        }
+    }
+}
+
+fn create_router_with_openapi(config: &TestaustimeConfig) -> (Router, utoipa::openapi::OpenApi) {
     let database = Arc::new(Database::new(config.database_url.clone()));
 
     let register_limiter = Arc::new(RegisterLimiter {
@@ -131,11 +157,11 @@ fn create_router(config: &TestaustimeConfig) -> Router {
         .with_middleware(),
     );
 
-    Router::new()
-        .route("/health", get(api::health))
+    OpenApiRouter::new()
+        .routes(routes!(api::health))
         .merge(
-            Router::new()
-                .route("/auth/register", post(api::auth::register))
+            OpenApiRouter::new()
+                .routes(routes!(api::auth::register))
                 .layer(TestaustimeRateLimiter {
                     limiter: register_ratelimiter,
                     use_peer_addr: config.ratelimit_by_peer_ip,
@@ -143,91 +169,43 @@ fn create_router(config: &TestaustimeConfig) -> Router {
                 }),
         )
         .merge({
-            let router = Router::new()
-                .nest("/activity", {
-                    Router::new()
-                        .route("/update", post(api::activity::update))
-                        .route("/delete", delete(api::activity::delete))
-                        .route("/flush", post(api::activity::flush))
-                        .route("/rename", post(api::activity::rename_project))
-                        .route("/hide", post(api::activity::hide_project))
-                })
-                .route("/auth/login", post(api::auth::login))
-                .route("/auth/change-username", post(api::auth::change_username))
-                .route("/auth/change-email", post(api::auth::change_email))
-                .route("/auth/change-password", post(api::auth::change_password))
-                .route(
-                    "/auth/reset-password",
-                    post(api::auth::request_password_reset),
-                )
-                .route(
-                    "/auth/complete-password-reset",
-                    post(api::auth::reset_password),
-                )
-                .route("/friends/add", post(api::friends::add_friend))
-                .route("/account/settings", post(api::account::change_settings))
-                .route("/friends/list", get(api::friends::get_friends))
-                .route(
-                    "/friends/regenerate",
-                    get(api::friends::regenerate_friend_code),
-                )
-                .route("/friends/remove", delete(api::friends::remove))
-                .route("/users/@me", get(api::users::my_profile))
-                .route("/users/@me/delete", delete(api::users::delete_user))
-                .route("/users/@me/leaderboards", get(api::users::my_leaderboards))
-                .route(
-                    "/users/{username}/activity/data",
-                    get(api::users::get_activities),
-                )
-                .route(
-                    "/users/{username}/activity/current",
-                    get(api::users::get_current_activity),
-                )
-                .route(
-                    "/users/{username}/activity/summary",
-                    get(api::users::get_activity_summary),
-                )
-                .route(
-                    "/leaderboards/create",
-                    post(api::leaderboards::create_leaderboard),
-                )
-                .route(
-                    "/leaderboards/{name}",
-                    get(api::leaderboards::get_leaderboard),
-                )
-                .route(
-                    "/leaderboards/join",
-                    post(api::leaderboards::join_leaderboard),
-                )
-                .route(
-                    "/leaderboards/{name}/leave",
-                    post(api::leaderboards::leave_leaderboard),
-                )
-                .route(
-                    "/leaderboards/{name}",
-                    delete(api::leaderboards::delete_leaderboard),
-                )
-                .route(
-                    "/leaderboards/{name}/promote",
-                    post(api::leaderboards::promote_member),
-                )
-                .route(
-                    "/leaderboards/{name}/demote",
-                    post(api::leaderboards::demote_member),
-                )
-                .route(
-                    "/leaderboards/{name}/kick",
-                    post(api::leaderboards::kick_member),
-                )
-                .route(
-                    "/leaderboards/{name}/regenerate",
-                    post(api::leaderboards::regenerate_invite),
-                )
-                .route("/search/users", get(api::search::search_public_users))
-                .route("/stats", get(api::stats::stats));
+            let router = OpenApiRouter::with_openapi(ApiDoc::openapi())
+                .routes(routes!(api::activity::update))
+                .routes(routes!(api::activity::delete))
+                .routes(routes!(api::activity::flush))
+                .routes(routes!(api::activity::rename_project))
+                .routes(routes!(api::activity::hide_project))
+                .routes(routes!(api::auth::login))
+                .routes(routes!(api::auth::change_username))
+                .routes(routes!(api::auth::change_email))
+                .routes(routes!(api::auth::change_password))
+                .routes(routes!(api::auth::request_password_reset))
+                .routes(routes!(api::auth::reset_password))
+                .routes(routes!(api::account::change_settings))
+                .routes(routes!(api::friends::add_friend))
+                .routes(routes!(api::friends::get_friends))
+                .routes(routes!(api::friends::regenerate_friend_code))
+                .routes(routes!(api::friends::remove))
+                .routes(routes!(api::users::my_profile))
+                .routes(routes!(api::users::delete_user))
+                .routes(routes!(api::users::my_leaderboards))
+                .routes(routes!(api::users::get_activities))
+                .routes(routes!(api::users::get_current_activity))
+                .routes(routes!(api::users::get_activity_summary))
+                .routes(routes!(api::leaderboards::create_leaderboard))
+                .routes(routes!(api::leaderboards::get_leaderboard))
+                .routes(routes!(api::leaderboards::join_leaderboard))
+                .routes(routes!(api::leaderboards::leave_leaderboard))
+                .routes(routes!(api::leaderboards::delete_leaderboard))
+                .routes(routes!(api::leaderboards::promote_member))
+                .routes(routes!(api::leaderboards::demote_member))
+                .routes(routes!(api::leaderboards::kick_member))
+                .routes(routes!(api::leaderboards::regenerate_invite))
+                .routes(routes!(api::search::search_public_users))
+                .routes(routes!(api::stats::stats));
 
             #[cfg(feature = "testausid")]
-            let router = router.route("/auth/callback", get(api::oauth::callback));
+            let router = router.routes(routes!(api::oauth::callback));
 
             router
                 .layer(
@@ -253,6 +231,7 @@ fn create_router(config: &TestaustimeConfig) -> Router {
                 ))
         })
         .with_state(state)
+        .split_for_parts()
 }
 
 #[tokio::main]
@@ -271,7 +250,9 @@ async fn main() {
         toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
             .expect("Invalid Toml in settings.toml");
 
-    let router = create_router(&config);
+    let (router, openapi) = create_router_with_openapi(&config);
+    let router =
+        router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi.clone()));
 
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await

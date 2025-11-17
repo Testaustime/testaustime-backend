@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::{
     extract::{FromRequestParts, State},
-    response::IntoResponse,
     Json,
 };
 use chrono::{Duration, Local};
@@ -11,44 +10,16 @@ use lettre::{
     message::header::ContentType, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     auth::Authentication,
     database::DatabaseWrapper,
     error::TimeError,
-    models::{SelfUser, UserId, UserIdentity},
+    models::{NewUserIdentity, SelfUser, UserId, UserIdentity},
     utils::{generate_password_reset_token, validate_email},
     PasswordReset, PasswordResetState,
 };
-
-#[derive(Deserialize)]
-pub struct UsernameChangeRequest {
-    pub new: String,
-}
-
-#[derive(Deserialize)]
-pub struct EmailChangeRequest {
-    pub new: String,
-}
-
-#[derive(Deserialize)]
-pub struct PasswordChangeRequest {
-    pub old: String,
-    pub new: String,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct LoginRequest {
-    pub username: String,
-    pub password: String,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct RegisterRequest {
-    pub username: String,
-    pub email: Option<String>,
-    pub password: String,
-}
 
 impl<S: Send + Sync> FromRequestParts<S> for UserId {
     type Rejection = TimeError;
@@ -101,10 +72,23 @@ where
     }
 }
 
+#[derive(Deserialize, Debug, ToSchema)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    responses(
+        (status = OK, body = SelfUser),
+    )
+)]
 pub async fn login(
     db: DatabaseWrapper,
     data: Json<LoginRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<SelfUser>, TimeError> {
     if data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
             "Password cannot be longer than 128 characters".to_string(),
@@ -119,10 +103,24 @@ pub async fn login(
     }
 }
 
+#[derive(Deserialize, Debug, ToSchema)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub email: Option<String>,
+    pub password: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    responses(
+        (status = OK, body = NewUserIdentity)
+    )
+)]
 pub async fn register(
     db: DatabaseWrapper,
     Json(data): Json<RegisterRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<NewUserIdentity>, TimeError> {
     if data.password.len() < 8 || data.password.len() > 128 {
         return Err(TimeError::InvalidLength(
             "Password has to be between 8 and 128 characters long".to_string(),
@@ -148,11 +146,26 @@ pub async fn register(
     Ok(Json(res))
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct UsernameChangeRequest {
+    pub new: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/change-username",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn change_username(
     user: UserIdentity,
     db: DatabaseWrapper,
     Json(data): Json<UsernameChangeRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     if data.new.len() < 2 || data.new.len() > 32 {
         return Err(TimeError::InvalidLength(
             "Username is not between 2 and 32 chars".to_string(),
@@ -172,11 +185,26 @@ pub async fn change_username(
     result.map(|_| StatusCode::OK)
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct EmailChangeRequest {
+    pub new: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/change-email",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn change_email(
     user: UserIdentity,
     db: DatabaseWrapper,
     Json(data): Json<EmailChangeRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     if !validate_email(&data.new) {
         return Err(TimeError::InvalidEmail);
     }
@@ -190,11 +218,27 @@ pub async fn change_email(
     result.map(|_| StatusCode::OK)
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct PasswordChangeRequest {
+    pub old: String,
+    pub new: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/change-password",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn change_password(
     user: UserIdentity,
     db: DatabaseWrapper,
     Json(body): Json<PasswordChangeRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     if body.new.len() < 8 || body.new.len() > 128 {
         return Err(TimeError::InvalidLength(
             "Password has to be between 8 and 128 characters long".to_string(),
@@ -212,17 +256,24 @@ pub async fn change_password(
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PasswordResetRequest {
     pub email: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/reset-password",
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn request_password_reset(
     db: DatabaseWrapper,
     State(password_resets): State<Arc<PasswordResetState>>,
     State(relay): State<AsyncSmtpTransport<Tokio1Executor>>,
     Json(body): Json<PasswordResetRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let Some(user) = db.get_user_by_email(&body.email).await? else {
         return Ok(StatusCode::OK);
     };
@@ -259,17 +310,24 @@ pub async fn request_password_reset(
     Ok(StatusCode::OK)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PasswordResetCompletionRequest {
     password: String,
     token: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/complete-password-reset",
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn reset_password(
     db: DatabaseWrapper,
     State(password_resets): State<Arc<PasswordResetState>>,
     Json(body): Json<PasswordResetCompletionRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let Some(reset) = password_resets.storage.get(&body.token) else {
         return Err(TimeError::InvalidPasswordResetToken);
     };

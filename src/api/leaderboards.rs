@@ -1,34 +1,47 @@
-use axum::{extract::Path, response::IntoResponse, Json};
+use axum::{extract::Path, Json};
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     database::DatabaseWrapper,
     error::TimeError,
-    models::{UserId, UserIdentity},
+    models::{PrivateLeaderboard, UserId, UserIdentity},
 };
 
-#[derive(Deserialize, Serialize)]
-pub struct LeaderboardName {
+use super::users::MinimalLeaderboard;
+
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct LeaderboardCreateRequest {
     pub name: String,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct LeaderboardInvite {
-    pub invite: String,
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LeaderboardUser {
     pub user: String,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct LeaderboardCreateResponse {
+    invite_code: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/leaderboards/create",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = LeaderboardCreateResponse)
+    )
+)]
 pub async fn create_leaderboard(
     creator: UserId,
     db: DatabaseWrapper,
-    body: Json<LeaderboardName>,
-) -> Result<impl IntoResponse, TimeError> {
+    body: Json<LeaderboardCreateRequest>,
+) -> Result<Json<LeaderboardCreateResponse>, TimeError> {
     if !super::VALID_NAME_REGEX.is_match(&body.name) {
         return Err(TimeError::BadLeaderboardName);
     }
@@ -38,7 +51,7 @@ pub async fn create_leaderboard(
     }
 
     match db.create_leaderboard(creator.id, &body.name).await {
-        Ok(code) => Ok(Json(json!({ "invite_code": code }))),
+        Ok(code) => Ok(Json(LeaderboardCreateResponse { invite_code: code })),
         Err(e) => {
             error!("{}", e);
             Err(match e {
@@ -52,11 +65,24 @@ pub async fn create_leaderboard(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/leaderboards/{name}",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = PrivateLeaderboard)
+    )
+)]
 pub async fn get_leaderboard(
     user: UserId,
     Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<PrivateLeaderboard>, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -70,11 +96,24 @@ pub async fn get_leaderboard(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/leaderboard/{name}",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn delete_leaderboard(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -88,11 +127,26 @@ pub async fn delete_leaderboard(
     }
 }
 
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct LeaderboardInvite {
+    pub invite: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/leaderboards/join",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = MinimalLeaderboard)
+    )
+)]
 pub async fn join_leaderboard(
     user: UserId,
     db: DatabaseWrapper,
     body: Json<LeaderboardInvite>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<MinimalLeaderboard>, TimeError> {
     match db
         .add_user_to_leaderboard(user.id, body.invite.trim().trim_start_matches("ttlic_"))
         .await
@@ -108,15 +162,28 @@ pub async fn join_leaderboard(
                 _ => e,
             })
         }
-        Ok(leaderboard) => Ok(Json(json!(leaderboard))),
+        Ok(leaderboard) => Ok(Json(leaderboard)),
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/leave",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = []),
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn leave_leaderboard(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -135,12 +202,25 @@ pub async fn leave_leaderboard(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/promote",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn promote_member(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     promotion: Json<LeaderboardUser>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -166,12 +246,25 @@ pub async fn promote_member(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/demote",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn demote_member(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     demotion: Json<LeaderboardUser>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -197,12 +290,25 @@ pub async fn demote_member(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/kick",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn kick_member(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
     kick: Json<LeaderboardUser>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -223,11 +329,29 @@ pub async fn kick_member(
     }
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct InviteCodeRegenerateResponse {
+    invite_code: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/regenerate",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = InviteCodeRegenerateResponse)
+    )
+)]
 pub async fn regenerate_invite(
     user: UserIdentity,
     Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<InviteCodeRegenerateResponse>, TimeError> {
     let lid = db
         .get_leaderboard_id_by_name(&name)
         .await
@@ -235,7 +359,7 @@ pub async fn regenerate_invite(
 
     if db.is_leaderboard_admin(user.id, lid).await? {
         let code = db.regenerate_leaderboard_invite(lid).await?;
-        Ok(Json(json!({ "invite_code": code })))
+        Ok(Json(InviteCodeRegenerateResponse { invite_code: code }))
     } else {
         Err(TimeError::Unauthorized)
     }

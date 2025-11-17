@@ -1,9 +1,6 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use axum::{
-    extract::Query,
-    response::{IntoResponse, Redirect},
-};
+use axum::{extract::Query, response::Redirect};
 use axum_extra::extract::{cookie::Cookie, CookieJar};
 use reqwest::Client;
 use serde_derive::Deserialize;
@@ -47,11 +44,18 @@ static CLIENT_INFO: LazyLock<ClientInfo> = LazyLock::new(|| {
         .expect("Invalid Toml in settings.toml")
 });
 
+#[utoipa::path(
+    get,
+    path = "/auth/callback",
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn callback(
     db: DatabaseWrapper,
     jar: CookieJar,
     request: Query<TokenExchangeRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<(CookieJar, Redirect), TimeError> {
     if request.code.chars().any(|c| !c.is_alphanumeric()) {
         return Err(TimeError::BadCode);
     }

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, Json};
 use chrono::{Duration, Local};
 use dashmap::DashMap;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
     database::DatabaseWrapper,
@@ -14,28 +15,27 @@ use crate::{
 
 pub type HeartBeatMemoryStore = DashMap<i32, (HeartBeat, chrono::NaiveDateTime, chrono::Duration)>;
 
-#[derive(Deserialize)]
-pub struct ActivityRenameRequest {
-    from: String,
-    to: String,
-}
-
-#[derive(Deserialize)]
-pub struct HideRequest {
-    target_project: String,
-    hidden: bool,
-}
-
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct UpdateResponse {
     duration: i64,
 }
+
+#[utoipa::path(
+    post,
+    path = "/activity/update",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = UpdateResponse)
+    )
+)]
 pub async fn update(
     user: UserId,
     db: DatabaseWrapper,
     heartbeats: State<Arc<HeartBeatMemoryStore>>,
     Json(heartbeat): Json<HeartBeat>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<UpdateResponse>, TimeError> {
     if let Some(project) = &heartbeat.project_name {
         if project.len() > 64 {
             return Err(TimeError::InvalidLength(
@@ -120,11 +120,21 @@ pub async fn update(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/activity/flush",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn flush(
     user: UserId,
     db: DatabaseWrapper,
     heartbeats: State<Arc<HeartBeatMemoryStore>>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     if let Some(heartbeat) = heartbeats.get(&user.id) {
         let (inner_heartbeat, start, duration) = heartbeat.to_owned();
         drop(heartbeat);
@@ -135,16 +145,26 @@ pub async fn flush(
     Ok(StatusCode::OK)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ActivityDeleteRequest {
     id: i32,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/activity/delete",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK)
+    )
+)]
 pub async fn delete(
     user: UserIdentity,
     db: DatabaseWrapper,
     Json(body): Json<ActivityDeleteRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let deleted = db.delete_activity(user.id, body.id).await?;
     if deleted {
         Ok(StatusCode::OK)
@@ -153,24 +173,70 @@ pub async fn delete(
     }
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct ActivityRenameRequest {
+    from: String,
+    to: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ActivityRenameResponse {
+    affected_activities: usize,
+}
+
+#[utoipa::path(
+    post,
+    path = "/activity/rename",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = ActivityRenameResponse)
+    )
+)]
 pub async fn rename_project(
     user: UserId,
     db: DatabaseWrapper,
     body: Json<ActivityRenameRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<ActivityRenameResponse>, TimeError> {
     let renamed = db.rename_project(user.id, &body.from, &body.to).await?;
 
-    Ok(Json(json!({ "affected_activities": renamed })))
+    Ok(Json(ActivityRenameResponse {
+        affected_activities: renamed,
+    }))
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct HideRequest {
+    target_project: String,
+    hidden: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct HideResponse {
+    affected_activities: usize,
+}
+
+#[utoipa::path(
+    post,
+    path = "/activity/hide",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, body = HideResponse)
+    )
+)]
 pub async fn hide_project(
     user: UserId,
     db: DatabaseWrapper,
     body: Json<HideRequest>,
-) -> Result<impl IntoResponse, TimeError> {
+) -> Result<Json<HideResponse>, TimeError> {
     let renamed = db
         .set_project_hidden(user.id, &body.target_project, body.hidden)
         .await?;
 
-    Ok(Json(json!({ "affected_activities": renamed })))
+    Ok(Json(HideResponse {
+        affected_activities: renamed,
+    }))
 }

@@ -1,13 +1,14 @@
 #![allow(clippy::extra_unused_lifetimes)]
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct UserId {
     pub id: i32,
 }
 
-#[derive(Identifiable, Queryable, Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Identifiable, Queryable, Clone, Debug, Serialize, PartialEq, Eq, ToSchema)]
 #[diesel(table_name = user_identities)]
 pub struct UserIdentity {
     pub id: i32,
@@ -20,7 +21,7 @@ pub struct UserIdentity {
     pub email: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PublicUser {
     pub id: i32,
     pub username: String,
@@ -61,7 +62,7 @@ pub struct NewTestaustimeUser {
     pub identity: i32,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct SelfUser {
     pub id: i32,
     pub auth_token: String,
@@ -109,7 +110,7 @@ pub struct TestausIdUser {
 
 use crate::schema::user_identities;
 
-#[derive(Insertable, Serialize, Clone, Deserialize)]
+#[derive(Insertable, Serialize, ToSchema, Clone, Deserialize)]
 #[diesel(table_name = user_identities)]
 pub struct NewUserIdentity {
     pub auth_token: String,
@@ -137,7 +138,7 @@ pub struct NewFriendRelation {
     pub greater_id: i32,
 }
 
-#[derive(Queryable, Clone, Debug, Serialize, Identifiable, Associations)]
+#[derive(Queryable, Clone, Debug, Serialize, Identifiable, Associations, ToSchema)]
 #[diesel(belongs_to(UserIdentity, foreign_key=user_id))]
 #[diesel(table_name = coding_activities)]
 pub struct CodingActivity {
@@ -207,7 +208,7 @@ pub struct NewLeaderboardMember {
     pub admin: bool,
 }
 
-#[derive(Serialize, Clone, Debug, Deserialize)]
+#[derive(Serialize, Clone, Debug, Deserialize, ToSchema)]
 pub struct PrivateLeaderboardMember {
     pub id: i32,
     pub username: String,
@@ -215,7 +216,7 @@ pub struct PrivateLeaderboardMember {
     pub time_coded: i32,
 }
 
-#[derive(Serialize, Clone, Debug, Deserialize)]
+#[derive(Serialize, Clone, Debug, Deserialize, ToSchema)]
 pub struct PrivateLeaderboard {
     pub name: String,
     pub invite: String,
@@ -223,14 +224,14 @@ pub struct PrivateLeaderboard {
     pub members: Vec<PrivateLeaderboardMember>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash, ToSchema)]
 pub struct CodingTimeSteps {
     pub all_time: i32,
     pub past_month: i32,
     pub past_week: i32,
 }
 
-#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone, ToSchema)]
 pub struct CurrentActivity {
     pub started: chrono::NaiveDateTime,
     pub duration: i64,
@@ -243,14 +244,14 @@ pub struct FriendWithTime {
     pub coding_time: CodingTimeSteps,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash, ToSchema)]
 pub struct FriendWithTimeAndStatus {
     pub username: String,
     pub coding_time: CodingTimeSteps,
     pub status: Option<CurrentActivity>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Deserialize, Serialize, ToSchema, Debug, Hash, Eq, PartialEq, Clone)]
 pub struct HeartBeat {
     #[serde(deserialize_with = "project_deserialize")]
     pub project_name: Option<String>,
