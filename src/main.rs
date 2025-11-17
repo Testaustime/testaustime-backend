@@ -193,10 +193,14 @@ fn create_router_with_openapi(config: &TestaustimeConfig) -> (Router, utoipa::op
                 .routes(routes!(api::users::get_current_activity))
                 .routes(routes!(api::users::get_activity_summary))
                 .routes(routes!(api::leaderboards::create_leaderboard))
-                .routes(routes!(api::leaderboards::get_leaderboard))
+                .routes(routes!(
+                    // utoipa/axum will not resolve these correctly based on method if registered
+                    // seperately, go figure
+                    api::leaderboards::get_leaderboard,
+                    api::leaderboards::delete_leaderboard
+                ))
                 .routes(routes!(api::leaderboards::join_leaderboard))
                 .routes(routes!(api::leaderboards::leave_leaderboard))
-                .routes(routes!(api::leaderboards::delete_leaderboard))
                 .routes(routes!(api::leaderboards::promote_member))
                 .routes(routes!(api::leaderboards::demote_member))
                 .routes(routes!(api::leaderboards::kick_member))

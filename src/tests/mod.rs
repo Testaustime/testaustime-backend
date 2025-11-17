@@ -17,7 +17,7 @@ use tower::ServiceExt;
 // NOTE: We would like to use diesels Connection::begin_test_transaction
 // But cannot use them because our database uses transactions to implement
 // some of the routes and there cannot exists transactions within transactions :'(
-use crate::create_router;
+use crate::create_router_with_openapi;
 
 const TEST_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000));
 
@@ -41,7 +41,9 @@ fn create_test_router() -> Router {
         mail_password: "".to_string(),
     };
 
-    create_router(&config).layer(MockConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))))
+    create_router_with_openapi(&config)
+        .0
+        .layer(MockConnectInfo(SocketAddr::from(([127, 0, 0, 1], 3000))))
 }
 
 #[tokio::test]

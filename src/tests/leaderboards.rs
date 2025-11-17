@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::{macros::*, *};
 use crate::{
-    api::leaderboards::{LeaderboardInvite, LeaderboardName},
+    api::leaderboards::{LeaderboardCreateRequest, LeaderboardInvite},
     models::{NewUserIdentity, PrivateLeaderboard},
 };
 
@@ -23,7 +23,7 @@ async fn creation_joining_and_deletion() {
 
     let member: NewUserIdentity = body_to_json(resp).await;
 
-    let create = LeaderboardName {
+    let create = LeaderboardCreateRequest {
         name: "board".to_string(),
     };
 

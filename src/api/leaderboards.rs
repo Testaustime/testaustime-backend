@@ -133,7 +133,7 @@ pub struct LeaderboardInvite {
 }
 
 #[utoipa::path(
-    get,
+    post,
     path = "/leaderboards/join",
     security(
         ("api_key" = [])
