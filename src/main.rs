@@ -127,7 +127,7 @@ fn create_router_with_openapi(config: &TestaustimeConfig) -> (Router, utoipa::op
             .build();
 
     debug!(
-        "Conntected to mail server on {} as {}",
+        "Connected to mail server on {} as {}",
         config.mail_server, config.mail_user
     );
 
