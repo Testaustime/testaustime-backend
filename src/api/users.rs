@@ -104,9 +104,10 @@ pub async fn delete_user(
         .await?
     {
         db.delete_user(user.id).await?;
+        Ok(StatusCode::OK)
+    } else {
+        Err(TimeError::Unauthorized)
     }
-
-    Ok(StatusCode::OK)
 }
 
 #[utoipa::path(
