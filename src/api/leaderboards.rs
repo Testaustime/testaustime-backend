@@ -98,7 +98,7 @@ pub async fn get_leaderboard(
 
 #[utoipa::path(
     delete,
-    path = "/leaderboard/{name}",
+    path = "/leaderboards/{name}",
     params(
         ("name", description = "Leaderboard name")
     ),
