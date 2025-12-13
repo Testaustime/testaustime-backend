@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
+    api::users::UserAuthentication,
     auth::Authentication,
     database::DatabaseWrapper,
     error::TimeError,
@@ -144,6 +145,35 @@ pub async fn register(
         .await?;
 
     Ok(Json(res))
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RegenerateResponse {
+    pub token: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/regenerate",
+    responses(
+        (status = OK, body = RegenerateResponse)
+    )
+)]
+pub async fn regenerate_auth_token(
+    db: DatabaseWrapper,
+    Json(credentials): Json<UserAuthentication>,
+) -> Result<Json<RegenerateResponse>, TimeError> {
+    if let Some(user) = db
+        .verify_user_password(&credentials.username, &credentials.password)
+        .await?
+    {
+        db.regenerate_token(user.id)
+            .await
+            .inspect_err(|e| error!("{}", e))
+            .map(|token| Json(RegenerateResponse { token }))
+    } else {
+        Err(TimeError::Unauthorized)
+    }
 }
 
 #[derive(Deserialize, ToSchema)]

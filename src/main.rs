@@ -176,6 +176,7 @@ fn create_router_with_openapi(config: &TestaustimeConfig) -> (Router, utoipa::op
                 .routes(routes!(api::activity::rename_project))
                 .routes(routes!(api::activity::hide_project))
                 .routes(routes!(api::auth::login))
+                .routes(routes!(api::auth::regenerate_auth_token))
                 .routes(routes!(api::auth::change_username))
                 .routes(routes!(api::auth::change_email))
                 .routes(routes!(api::auth::change_password))

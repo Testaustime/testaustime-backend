@@ -77,6 +77,21 @@ impl super::DatabaseWrapper {
         }
     }
 
+    pub async fn regenerate_token(&self, userid: i32) -> Result<String, TimeError> {
+        let mut conn = self.db.get().await?;
+
+        let token = crate::utils::generate_auth_token();
+
+        use crate::schema::user_identities::dsl::*;
+
+        diesel::update(user_identities.find(userid))
+            .set(auth_token.eq(&token))
+            .execute(&mut conn)
+            .await?;
+
+        Ok(token)
+    }
+
     pub async fn new_testaustime_user(
         &self,
         username: &str,
