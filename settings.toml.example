@@ -7,3 +7,6 @@ max_heartbeats_per_min=8
 max_registers_per_day=3
 bypass_token="5woKC8Z3pqLqhDTX/zY1j1JxMozglIukNsr3YMMLBOk="
 max_registers_per_hour=5
+mail_server="mail.testaustime.fi"
+mail_user="noreply@testaustime.fi"
+mail_password="password"
