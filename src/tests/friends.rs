@@ -20,7 +20,7 @@ async fn adding_friends_works() {
 
     let friend_body = json!({"code": f2.friend_code.clone()});
     let resp = request_auth!(app, POST, "/friends/add", f1.auth_token, friend_body);
-    println!("{:?}", resp);
+    println!("{resp:?}");
 
     assert!(resp.status().is_success(), "Adding friend works");
 

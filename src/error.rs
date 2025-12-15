@@ -1,6 +1,6 @@
 use axum::{
-    response::{IntoResponse, Response},
     Json,
+    response::{IntoResponse, Response},
 };
 use http::StatusCode;
 use thiserror::Error;
@@ -31,9 +31,13 @@ pub enum TimeError {
     InvalidCredentials,
     #[error("{0}")]
     InvalidLength(String),
-    #[error("Username has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
+    #[error(
+        "Username has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters"
+    )]
     BadUsername,
-    #[error("Leaderboard name has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
+    #[error(
+        "Leaderboard name has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters"
+    )]
     BadLeaderboardName,
     #[error("Bad id")]
     BadId,

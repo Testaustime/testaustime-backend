@@ -2,36 +2,36 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     systems.url = "github:nix-systems/default";
-    devenv.url = "github:cachix/devenv";
-    devenv.inputs.nixpkgs.follows = "nixpkgs";
 
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    treefmt-nix.url = "github:numtide/treefmt-nix";
+    treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
     {
       self,
       nixpkgs,
-      devenv,
       systems,
       fenix,
       crane,
+      treefmt-nix,
       ...
     }@inputs:
     let
       forEachSystem = nixpkgs.lib.genAttrs (import systems);
-    in
-    {
-      packages = forEachSystem (
+
+      perSystem =
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
 
-          toolchain = fenix.packages.${system}.minimal.toolchain;
+          # Use default toolchain to include clippy and rustfmt
+          toolchain = fenix.packages.${system}.default.toolchain;
 
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
 
@@ -45,11 +45,39 @@
               doCheck = false;
             }
           );
+
+          treefmtEval = treefmt-nix.lib.evalModule pkgs {
+            projectRootFile = "flake.nix";
+            programs.nixfmt.enable = true;
+            programs.nixfmt.package = pkgs.nixfmt-rfc-style;
+            programs.taplo.enable = true;
+            programs.rustfmt.enable = true;
+            programs.rustfmt.package = toolchain;
+          };
+        in
+        {
+          inherit
+            pkgs
+            toolchain
+            craneLib
+            commonArgs
+            cargoArtifacts
+            treefmtEval
+            ;
+        };
+    in
+    {
+      packages = forEachSystem (
+        system:
+        let
+          inherit (perSystem system)
+            pkgs
+            craneLib
+            commonArgs
+            cargoArtifacts
+            ;
         in
         rec {
-          devenv-up = self.devShells.${system}.default.config.procfileScript;
-          devenv-test = self.devShells.${system}.default.config.test;
-
           testaustime-backend = craneLib.buildPackage (
             commonArgs
             // {
@@ -104,20 +132,42 @@
         }
       );
 
+      checks = forEachSystem (
+        system:
+        let
+          inherit (perSystem system)
+            craneLib
+            commonArgs
+            cargoArtifacts
+            treefmtEval
+            ;
+        in
+        {
+          testaustime-backend-clippy = craneLib.cargoClippy (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            }
+          );
+
+          formatting = treefmtEval.config.build.check self;
+        }
+      );
+
+      formatter = forEachSystem (system: (perSystem system).treefmtEval.config.build.wrapper);
+
       devShells = forEachSystem (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          inherit (perSystem system) pkgs toolchain treefmtEval;
         in
         {
-          default = devenv.lib.mkShell {
-            inherit inputs pkgs;
-            modules = [
-              {
-                languages.rust.enable = true;
-
-                packages = [ self.outputs.packages.${system}.testaustime-backend ];
-              }
+          default = pkgs.mkShell {
+            packages = [
+              toolchain
+              pkgs.diesel-cli
+              treefmtEval.config.build.wrapper
             ];
           };
         }

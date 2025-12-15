@@ -2,7 +2,10 @@
 name = "testaustime"
 version = "0.3.1"
 edition = "2021"
-authors = ["Ville Järvinen <jarvinenville606@gmail.com>", "Luukas Pörtfors <lajp@iki.fi>"]
+authors = [
+  "Ville Järvinen <jarvinenville606@gmail.com>",
+  "Luukas Pörtfors <lajp@iki.fi>",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
@@ -15,8 +18,14 @@ lto = true
 [dependencies]
 axum = { version = "0.8", features = ["macros", "tokio"] }
 axum-extra = { version = "0.10", features = ["cookie", "cookie-private"] }
-tokio = { version = "1.35", features = ["macros", "rt-multi-thread"]}
-reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls", "charset", "http2", "macos-system-configuration"] }
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }
+reqwest = { version = "0.12", optional = true, default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "charset",
+  "http2",
+  "macos-system-configuration",
+] }
 http = "1.0"
 http-body-util = "0.1"
 regex = "1.5"
@@ -25,7 +34,10 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["trace"] }
 
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
+tracing-subscriber = { version = "0.3", features = [
+  "env-filter",
+  "tracing-log",
+] }
 tracing-futures = "0.2"
 
 thiserror = "2.0"
@@ -39,7 +51,7 @@ futures = "0.3"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 dashmap = "6.1"
-argon2 = { version = "0.4", features = ["std"]}
+argon2 = { version = "0.4", features = ["std"] }
 rand = "0.9"
 dotenv = "0.15"
 url = "2.2"
@@ -48,8 +60,15 @@ itertools = "0.14"
 governor = "0.10.0"
 diesel = { version = "2.1.0", features = ["chrono", "serde_json"] }
 diesel-async = { version = "0.5.1", features = ["postgres", "deadpool"] }
-lettre = { version = "0.11.14", default-features = false, features = ["tokio1-rustls-tls", "tracing", "pool", "smtp-transport", "hostname", "builder"]}
+lettre = { version = "0.11.14", default-features = false, features = [
+  "tokio1-rustls-tls",
+  "tracing",
+  "pool",
+  "smtp-transport",
+  "hostname",
+  "builder",
+] }
 mime = "0.3.17"
 utoipa = { version = "5.4.0", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2.0"
-utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
