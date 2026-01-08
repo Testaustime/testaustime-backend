@@ -74,8 +74,10 @@ pub async fn update(
                 if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                     // If the user sends a heartbeat but maximum activity duration has been exceeded,
                     // end session and start new
-                    db.add_activity(user.id, current_heartbeat, start, duration)
-                        .await?;
+                    if duration > Duration::zero() {
+                        db.add_activity(user.id, current_heartbeat, start, duration)
+                            .await?;
+                    }
 
                     heartbeats.insert(
                         user.id,
@@ -98,8 +100,10 @@ pub async fn update(
                     duration = curtime.signed_duration_since(start);
                 }
 
-                db.add_activity(user.id, current_heartbeat, start, duration)
-                    .await?;
+                if duration > Duration::zero() {
+                    db.add_activity(user.id, current_heartbeat, start, duration)
+                        .await?;
+                }
 
                 heartbeats.insert(
                     user.id,
@@ -139,8 +143,10 @@ pub async fn flush(
         let (inner_heartbeat, start, duration) = heartbeat.to_owned();
         drop(heartbeat);
         heartbeats.remove(&user.id);
-        db.add_activity(user.id, inner_heartbeat, start, duration)
-            .await?;
+        if duration > Duration::zero() {
+            db.add_activity(user.id, inner_heartbeat, start, duration)
+                .await?;
+        }
     }
     Ok(StatusCode::OK)
 }
