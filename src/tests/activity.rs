@@ -41,7 +41,7 @@ async fn updating_activity_works() {
     );
 
     // NOTE: adding duration to the session
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let resp = request_auth!(app, POST, "/activity/update", user.auth_token, heartbeat);
     assert!(resp.status().is_success(), "Extending session should work");
@@ -121,7 +121,7 @@ async fn flushing_works() {
     let resp = request_auth!(app, GET, "/users/@me/activity/data", user.auth_token);
     let data: Vec<serde_json::Value> = body_to_json(resp).await;
 
-    assert!(!data.is_empty(), "Session should be saved after a flush");
+    assert!(data.is_empty(), "0 duration session should not be saved");
 
     let resp = request!(app, DELETE, "/users/@me/delete", body);
     assert!(resp.status().is_success(), "Failed to delete user");
@@ -142,6 +142,14 @@ async fn hidden_project() {
         editor_name: Some(String::from("nvim")),
         hidden: Some(true),
     };
+
+    let resp = request_auth!(app, POST, "/activity/update", user.auth_token, heartbeat);
+    assert!(
+        resp.status().is_success(),
+        "Sending heartbeat should succeed"
+    );
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let resp = request_auth!(app, POST, "/activity/update", user.auth_token, heartbeat);
     assert!(
@@ -170,7 +178,7 @@ async fn hidden_project() {
     );
     let data: Vec<serde_json::Value> = body_to_json(resp).await;
 
-    assert!(!data.is_empty(), "Session should be saved after a flush");
+    assert!(!data.is_empty(), "Session with non-zero duration should be saved");
     // Print the actual value of the project name to see what it is
     assert!(
         data[0].get("project_name").unwrap_or(&json!("not_hidden")) == &json!("hidden"),
