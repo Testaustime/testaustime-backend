@@ -8,11 +8,11 @@ diesel::table! {
         duration -> Int4,
         #[max_length = 64]
         project_name -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         language -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         editor_name -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         hostname -> Nullable<Varchar>,
         hidden -> Bool,
     }

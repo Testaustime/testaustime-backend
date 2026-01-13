@@ -44,23 +44,23 @@ pub async fn update(
         }
     }
     if let Some(language) = &heartbeat.language {
-        if language.len() > 32 {
+        if language.len() > 64 {
             return Err(TimeError::InvalidLength(
-                "Language is over 32 chars".to_string(),
+                "Language is over 64 chars".to_string(),
             ));
         }
     }
     if let Some(editor) = &heartbeat.editor_name {
-        if editor.len() > 32 {
+        if editor.len() > 64 {
             return Err(TimeError::InvalidLength(
-                "Editor name is over 32 chars".to_string(),
+                "Editor name is over 64 chars".to_string(),
             ));
         }
     }
     if let Some(hostname) = &heartbeat.hostname {
-        if hostname.len() > 32 {
+        if hostname.len() > 64 {
             return Err(TimeError::InvalidLength(
-                "Hostname is over 32 chars".to_string(),
+                "Hostname is over 64 chars".to_string(),
             ));
         }
     }
