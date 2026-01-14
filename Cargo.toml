@@ -17,14 +17,14 @@ lto = true
 
 [dependencies]
 axum = { version = "0.8", features = ["macros", "tokio"] }
-axum-extra = { version = "0.10", features = ["cookie", "cookie-private"] }
+axum-extra = { version = "0.12", features = ["cookie", "cookie-private"] }
 tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }
-reqwest = { version = "0.12", optional = true, default-features = false, features = [
+reqwest = { version = "0.13", optional = true, default-features = false, features = [
   "json",
-  "rustls-tls",
+  "rustls",
   "charset",
   "http2",
-  "macos-system-configuration",
+  "form"
 ] }
 http = "1.0"
 http-body-util = "0.1"
@@ -46,12 +46,12 @@ serde = { version = "1.0.164", features = ["derive"] }
 serde_json = "1.0"
 serde_derive = "1.0"
 
-toml = "0.8"
+toml = "0.9"
 futures = "0.3"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 dashmap = "6.1"
-argon2 = { version = "0.4", features = ["std"] }
+argon2 = { version = "0.5", features = ["std"] }
 rand = "0.9"
 dotenv = "0.15"
 url = "2.2"
@@ -59,7 +59,7 @@ url = "2.2"
 itertools = "0.14"
 governor = "0.10.0"
 diesel = { version = "2.1.0", features = ["chrono", "serde_json"] }
-diesel-async = { version = "0.5.1", features = ["postgres", "deadpool"] }
+diesel-async = { version = "0.7", features = ["postgres", "deadpool"] }
 lettre = { version = "0.11.14", default-features = false, features = [
   "tokio1-rustls-tls",
   "tracing",

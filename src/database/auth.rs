@@ -1,6 +1,5 @@
 use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    Algorithm, Argon2, Params, Version, password_hash::{PasswordHasher, SaltString, rand_core::OsRng}
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -62,8 +61,15 @@ impl super::DatabaseWrapper {
             .first::<(UserIdentity, TestaustimeUser)>(&mut conn)
             .await?;
 
-        let argon2 = Argon2::default();
-        let salt = SaltString::new(std::str::from_utf8(&tuser.salt).expect("Infallible"))?;
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id, Version::V0x13, Params::new(
+                4096,
+                3,
+                1,
+                None,
+            ).unwrap()
+        );
+        let salt = SaltString::from_b64(std::str::from_utf8(&tuser.salt).expect("Infallible"))?;
 
         let password_hash = argon2.hash_password(password.as_bytes(), &salt)?;
 
@@ -102,7 +108,14 @@ impl super::DatabaseWrapper {
             return Err(TimeError::UsernameTaken);
         }
         let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id, Version::V0x13, Params::new(
+                4096,
+                3,
+                1,
+                None,
+            ).unwrap()
+        );
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
         let token = generate_auth_token();
         let hash = password_hash.hash.unwrap();
@@ -132,7 +145,7 @@ impl super::DatabaseWrapper {
 
                     let testaustime_user = NewTestaustimeUser {
                         password: hash.as_bytes().to_vec(),
-                        salt: salt.as_bytes().to_vec(),
+                        salt: salt.as_str().as_bytes().to_vec(),
                         identity: id[0],
                     };
 
@@ -179,7 +192,15 @@ impl super::DatabaseWrapper {
 
     pub async fn change_password(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
         let new_salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id, Version::V0x13, Params::new(
+                4096,
+                3,
+                1,
+                None,
+            ).unwrap()
+        );
+
         let password_hash = argon2
             .hash_password(new_password.as_bytes(), &new_salt)
             .unwrap();
@@ -192,7 +213,7 @@ impl super::DatabaseWrapper {
             .filter(identity.eq(user))
             .set((
                 password.eq(&new_hash.as_bytes()),
-                salt.eq(new_salt.as_bytes()),
+                salt.eq(new_salt.as_str().as_bytes()),
             ))
             .execute(&mut conn)
             .await?;
