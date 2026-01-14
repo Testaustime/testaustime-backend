@@ -7,7 +7,7 @@ use axum::extract::Request;
 use futures_util::future::BoxFuture;
 use tower::{Layer, Service};
 
-use crate::{TestaustimeState, database::DatabaseWrapper, models::UserIdentity};
+use crate::{database::DatabaseWrapper, models::UserIdentity, TestaustimeState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {

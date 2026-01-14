@@ -1,4 +1,4 @@
-use chrono::{Duration, prelude::*};
+use chrono::{prelude::*, Duration};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 

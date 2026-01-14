@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{Json, extract::State};
+use axum::{extract::State, Json};
 use diesel::result::DatabaseErrorKind;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};

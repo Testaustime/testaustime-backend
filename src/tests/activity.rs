@@ -178,7 +178,10 @@ async fn hidden_project() {
     );
     let data: Vec<serde_json::Value> = body_to_json(resp).await;
 
-    assert!(!data.is_empty(), "Session with non-zero duration should be saved");
+    assert!(
+        !data.is_empty(),
+        "Session with non-zero duration should be saved"
+    );
     // Print the actual value of the project name to see what it is
     assert!(
         data[0].get("project_name").unwrap_or(&json!("not_hidden")) == &json!("hidden"),

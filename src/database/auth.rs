@@ -1,5 +1,6 @@
 use argon2::{
-    Algorithm, Argon2, Params, Version, password_hash::{PasswordHasher, SaltString, rand_core::OsRng}
+    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    Algorithm, Argon2, Params, Version,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -62,12 +63,9 @@ impl super::DatabaseWrapper {
             .await?;
 
         let argon2 = Argon2::new(
-            Algorithm::Argon2id, Version::V0x13, Params::new(
-                4096,
-                3,
-                1,
-                None,
-            ).unwrap()
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(4096, 3, 1, None).unwrap(),
         );
         let salt = SaltString::from_b64(std::str::from_utf8(&tuser.salt).expect("Infallible"))?;
 
@@ -109,12 +107,9 @@ impl super::DatabaseWrapper {
         }
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::new(
-            Algorithm::Argon2id, Version::V0x13, Params::new(
-                4096,
-                3,
-                1,
-                None,
-            ).unwrap()
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(4096, 3, 1, None).unwrap(),
         );
         let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
         let token = generate_auth_token();
@@ -193,12 +188,9 @@ impl super::DatabaseWrapper {
     pub async fn change_password(&self, user: i32, new_password: &str) -> Result<(), TimeError> {
         let new_salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::new(
-            Algorithm::Argon2id, Version::V0x13, Params::new(
-                4096,
-                3,
-                1,
-                None,
-            ).unwrap()
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(4096, 3, 1, None).unwrap(),
         );
 
         let password_hash = argon2
