@@ -24,7 +24,7 @@ reqwest = { version = "0.13", optional = true, default-features = false, feature
   "rustls",
   "charset",
   "http2",
-  "form"
+  "form",
 ] }
 http = "1.0"
 http-body-util = "0.1"

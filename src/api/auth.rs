@@ -1,25 +1,25 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{FromRequestParts, State},
     Json,
+    extract::{FromRequestParts, State},
 };
 use chrono::{Duration, Local};
-use http::{request::Parts, StatusCode};
+use http::{StatusCode, request::Parts};
 use lettre::{
-    message::header::ContentType, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::header::ContentType,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
+    PasswordReset, PasswordResetState,
     api::users::UserAuthentication,
     auth::Authentication,
     database::DatabaseWrapper,
     error::TimeError,
     models::{NewUserIdentity, SelfUser, UserId, UserIdentity},
     utils::{generate_password_reset_token, validate_email},
-    PasswordReset, PasswordResetState,
 };
 
 impl<S: Send + Sync> FromRequestParts<S> for UserId {

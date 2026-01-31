@@ -11,12 +11,12 @@ use axum::{
 };
 use futures_util::future::BoxFuture;
 use governor::{
-    clock::DefaultClock, middleware::StateInformationMiddleware,
-    state::keyed::DefaultKeyedStateStore, RateLimiter,
+    RateLimiter, clock::DefaultClock, middleware::StateInformationMiddleware,
+    state::keyed::DefaultKeyedStateStore,
 };
 use http::{
-    header::{HeaderName, FORWARDED},
     HeaderValue, StatusCode,
+    header::{FORWARDED, HeaderName},
 };
 use tower::{Layer, Service};
 

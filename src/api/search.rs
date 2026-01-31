@@ -1,4 +1,4 @@
-use axum::{extract::Query, Json};
+use axum::{Json, extract::Query};
 use serde_derive::Deserialize;
 use utoipa::IntoParams;
 

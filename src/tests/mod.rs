@@ -9,7 +9,7 @@ mod friends;
 mod leaderboards;
 mod macros;
 
-use axum::{body::Body, extract::connect_info::MockConnectInfo, response::Response, Router};
+use axum::{Router, body::Body, extract::connect_info::MockConnectInfo, response::Response};
 use http::{Request, StatusCode};
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;

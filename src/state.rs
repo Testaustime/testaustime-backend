@@ -4,7 +4,7 @@ use axum::extract::FromRef;
 use lettre::{AsyncSmtpTransport, Tokio1Executor};
 
 use crate::{
-    api::activity::HeartBeatMemoryStore, PasswordResetState, RegisterLimiter, TestaustimeState,
+    PasswordResetState, RegisterLimiter, TestaustimeState, api::activity::HeartBeatMemoryStore,
 };
 
 impl FromRef<TestaustimeState> for Arc<HeartBeatMemoryStore> {

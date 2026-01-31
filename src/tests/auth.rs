@@ -104,11 +104,13 @@ async fn invalid_usernames_and_passwords_are_rejected() {
     );
     let resp_body: serde_json::Value = body_to_json(resp).await;
 
-    assert!(resp_body["error"]
-        .as_str()
-        .unwrap()
-        .to_ascii_lowercase()
-        .contains("username"));
+    assert!(
+        resp_body["error"]
+            .as_str()
+            .unwrap()
+            .to_ascii_lowercase()
+            .contains("username")
+    );
 
     let body = json!({"username": "validusername", "password": "short"});
     let resp = request!(app, POST, "/auth/register", body);
@@ -118,11 +120,13 @@ async fn invalid_usernames_and_passwords_are_rejected() {
     );
     let resp_body: serde_json::Value = body_to_json(resp).await;
 
-    assert!(resp_body["error"]
-        .as_str()
-        .unwrap()
-        .to_ascii_lowercase()
-        .contains("password"));
+    assert!(
+        resp_body["error"]
+            .as_str()
+            .unwrap()
+            .to_ascii_lowercase()
+            .contains("password")
+    );
 }
 
 // TODO: test ratelimits
