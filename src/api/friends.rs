@@ -13,19 +13,28 @@ use crate::{
     models::{CurrentActivity, FriendWithTimeAndStatus, UserId, UserIdentity},
 };
 
+/// Request body for adding a friend.
 #[derive(Deserialize, Debug, ToSchema)]
 pub struct FriendRequest {
+    /// The friend code (starts with ttfc_).
     pub code: String,
 }
 
+/// Add a friend using their friend code.
+///
+/// Friend codes start with `ttfc_`. Returns the friend's profile with coding stats.
 #[utoipa::path(
     post,
     path = "/friends/add",
+    request_body = FriendRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = FriendWithTimeAndStatus)
+        (status = OK, description = "Friend added successfully", body = FriendWithTimeAndStatus),
+        (status = 400, description = "Invalid friend code"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Already friends"),
     )
 )]
 pub async fn add_friend(
@@ -72,6 +81,9 @@ pub async fn add_friend(
     }
 }
 
+/// Get list of friends with coding stats.
+///
+/// Returns all friends with their coding time and current activity status.
 #[utoipa::path(
     get,
     path = "/friends/list",
@@ -79,7 +91,8 @@ pub async fn add_friend(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = Vec<FriendWithTimeAndStatus>)
+        (status = OK, description = "Friends list retrieved", body = Vec<FriendWithTimeAndStatus>),
+        (status = 401, description = "Unauthorized"),
     )
 )]
 pub async fn get_friends(
@@ -113,11 +126,16 @@ pub async fn get_friends(
     Ok(Json(friends))
 }
 
+/// Response containing the newly generated friend code.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RegenerateFriendCodeResponse {
+    /// The new friend code (starts with ttfc_).
     friend_code: String,
 }
 
+/// Generate a new friend code.
+///
+/// Invalidates the previous friend code. Others must use the new code to add you as a friend.
 #[utoipa::path(
     post,
     path = "/friends/regenerate",
@@ -125,7 +143,8 @@ pub struct RegenerateFriendCodeResponse {
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = RegenerateFriendCodeResponse)
+        (status = OK, description = "New friend code generated", body = RegenerateFriendCodeResponse),
+        (status = 401, description = "Unauthorized"),
     )
 )]
 pub async fn regenerate_friend_code(
@@ -138,19 +157,27 @@ pub async fn regenerate_friend_code(
         .map(|c| Json(RegenerateFriendCodeResponse { friend_code: c }))
 }
 
+/// Request body for removing a friend.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct RemoveFriendRequest {
+    /// Username of the friend to remove.
     name: String,
 }
 
+/// Remove a friend.
+///
+/// Removes the friendship in both directions.
 #[utoipa::path(
     delete,
     path = "/friends/remove",
+    request_body = RemoveFriendRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Friend removed"),
+        (status = 400, description = "Friend not found"),
+        (status = 401, description = "Unauthorized"),
     )
 )]
 pub async fn remove(

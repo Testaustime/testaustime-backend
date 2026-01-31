@@ -33,6 +33,9 @@ pub struct DataRequest {
     pub project_name: Option<String>,
 }
 
+/// Get the authenticated user's profile.
+///
+/// Returns the user's identity including username, friend code, and registration time.
 #[utoipa::path(
     get,
     path = "/users/@me",
@@ -40,28 +43,41 @@ pub struct DataRequest {
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = UserIdentity)
+        (status = OK, description = "User profile retrieved", body = UserIdentity),
+        (status = 401, description = "Unauthorized"),
     )
 )]
 pub async fn my_profile(user: UserIdentity) -> Result<Json<UserIdentity>, TimeError> {
     Ok(Json(user))
 }
 
+/// Leaderboard summary for the user's leaderboard list.
 #[derive(Serialize, ToSchema)]
 pub struct ListLeaderboard {
+    /// Name of the leaderboard.
     pub name: String,
+    /// Total number of members in the leaderboard.
     pub member_count: i32,
+    /// The member with the most coding time.
     pub top_member: PrivateLeaderboardMember,
+    /// The authenticated user's position (1-indexed).
     pub my_position: i32,
+    /// The authenticated user's member info.
     pub me: PrivateLeaderboardMember,
 }
 
+/// Basic leaderboard information.
 #[derive(Serialize, ToSchema)]
 pub struct MinimalLeaderboard {
+    /// Name of the leaderboard.
     pub name: String,
+    /// Total number of members in the leaderboard.
     pub member_count: i32,
 }
 
+/// Get leaderboards the user is a member of.
+///
+/// Returns a list of leaderboards with member count, top member, and user's position.
 #[utoipa::path(
     get,
     path = "/users/@me/leaderboards",
@@ -69,7 +85,8 @@ pub struct MinimalLeaderboard {
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = Vec<ListLeaderboard>)
+        (status = OK, description = "Leaderboards retrieved", body = Vec<ListLeaderboard>),
+        (status = 401, description = "Unauthorized"),
     )
 )]
 pub async fn my_leaderboards(
@@ -79,20 +96,28 @@ pub async fn my_leaderboards(
     Ok(Json(db.get_user_leaderboards(user.id).await?))
 }
 
+/// Credentials for user authentication.
 #[derive(Deserialize, ToSchema)]
 pub struct UserAuthentication {
+    /// The user's username.
     pub username: String,
+    /// The user's password.
     pub password: String,
 }
 
+/// Delete a user account.
+///
+/// Requires username and password verification. This action is irreversible.
 #[utoipa::path(
     delete,
     path = "/users/@me/delete",
+    request_body = UserAuthentication,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Account deleted successfully"),
+        (status = 401, description = "Invalid credentials"),
     )
 )]
 pub async fn delete_user(
@@ -110,17 +135,23 @@ pub async fn delete_user(
     }
 }
 
+/// Get a user's current coding activity.
+///
+/// Returns the user's current coding session if active. Use `@me` for the authenticated user.
+/// Accessible for public profiles, friends, or the authenticated user.
 #[utoipa::path(
     get,
     path = "/users/{username}/activity/current",
     params(
-        ("username", description = "User name"),
+        ("username", description = "Username or @me for self"),
     ),
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = Option<CurrentActivity>)
+        (status = OK, description = "Current activity retrieved", body = Option<CurrentActivity>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found or not currently active"),
     )
 )]
 pub async fn get_current_activity(
@@ -192,17 +223,23 @@ pub async fn get_current_activity(
     }
 }
 
+/// Get a user's coding activity history.
+///
+/// Returns all coding activities with optional filtering by date range, duration, editor, language, hostname, or project.
+/// Use `@me` for the authenticated user. Accessible for public profiles, friends, or the authenticated user.
 #[utoipa::path(
     get,
     path = "/users/{username}/activity/data",
     params(
-        ("username", description = "User name"),
+        ("username", description = "Username or @me for self"),
     ),
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = Vec<CodingActivity>)
+        (status = OK, description = "Activity history retrieved", body = Vec<CodingActivity>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found"),
     )
 )]
 pub async fn get_activities(
@@ -248,30 +285,43 @@ pub async fn get_activities(
     Ok(Json(data))
 }
 
+/// Coding time breakdown by programming language.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct LanguageSummary {
+    /// Map of language name to coding time in seconds.
     languages: HashMap<String, i32>,
+    /// Total coding time in seconds.
     total: i32,
 }
 
+/// Summary of coding activity over different time periods.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ActivitySummary {
+    /// Coding time breakdown for the last 7 days.
     last_week: LanguageSummary,
+    /// Coding time breakdown for the last 30 days.
     last_month: LanguageSummary,
+    /// Coding time breakdown for all time.
     all_time: LanguageSummary,
 }
 
+/// Get a summary of a user's coding activity.
+///
+/// Returns aggregated coding time by language for last week, last month, and all time.
+/// Use `@me` for the authenticated user. Accessible for public profiles, friends, or the authenticated user.
 #[utoipa::path(
     get,
     path = "/users/{username}/activity/summary",
     params(
-        ("username", description = "User name")
+        ("username", description = "Username or @me for self")
     ),
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = ActivitySummary)
+        (status = OK, description = "Activity summary retrieved", body = ActivitySummary),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found"),
     )
 )]
 pub async fn get_activity_summary(

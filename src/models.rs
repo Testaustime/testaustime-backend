@@ -8,23 +8,34 @@ pub struct UserId {
     pub id: i32,
 }
 
+/// A user's identity and profile information.
 #[derive(Identifiable, Queryable, Clone, Debug, Serialize, PartialEq, Eq, ToSchema)]
 #[diesel(table_name = user_identities)]
 pub struct UserIdentity {
+    /// Unique user identifier.
     pub id: i32,
     #[serde(skip_serializing)]
     pub auth_token: String,
+    /// Code for others to add this user as a friend (starts with ttfc_).
     pub friend_code: String,
+    /// The user's display name.
     pub username: String,
+    /// When the user registered.
     pub registration_time: chrono::NaiveDateTime,
+    /// Whether the user's profile is publicly visible.
     pub is_public: bool,
+    /// The user's email address (optional).
     pub email: Option<String>,
 }
 
+/// Public user information visible to anyone.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PublicUser {
+    /// Unique user identifier.
     pub id: i32,
+    /// The user's display name.
     pub username: String,
+    /// When the user registered.
     pub registration_time: chrono::NaiveDateTime,
 }
 
@@ -62,13 +73,20 @@ pub struct NewTestaustimeUser {
     pub identity: i32,
 }
 
+/// Full user profile returned to the authenticated user.
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct SelfUser {
+    /// Unique user identifier.
     pub id: i32,
+    /// Authentication token for API requests.
     pub auth_token: String,
+    /// Code for others to add this user as a friend (starts with ttfc_).
     pub friend_code: String,
+    /// The user's display name.
     pub username: String,
+    /// When the user registered.
     pub registration_time: chrono::NaiveDateTime,
+    /// Whether the user's profile is publicly visible.
     pub is_public: bool,
 }
 
@@ -110,13 +128,19 @@ pub struct TestausIdUser {
 
 use crate::schema::user_identities;
 
+/// A newly created user identity.
 #[derive(Insertable, Serialize, ToSchema, Clone, Deserialize)]
 #[diesel(table_name = user_identities)]
 pub struct NewUserIdentity {
+    /// Authentication token for API requests.
     pub auth_token: String,
+    /// The user's display name.
     pub username: String,
+    /// Code for others to add this user as a friend (starts with ttfc_).
     pub friend_code: String,
+    /// When the user registered.
     pub registration_time: chrono::NaiveDateTime,
+    /// The user's email address (optional).
     pub email: Option<String>,
 }
 
@@ -138,19 +162,28 @@ pub struct NewFriendRelation {
     pub greater_id: i32,
 }
 
+/// A recorded coding activity session.
 #[derive(Queryable, Clone, Debug, Serialize, Identifiable, Associations, ToSchema)]
 #[diesel(belongs_to(UserIdentity, foreign_key=user_id))]
 #[diesel(table_name = coding_activities)]
 pub struct CodingActivity {
+    /// Unique activity identifier.
     pub id: i32,
     #[serde(skip_serializing)]
     pub user_id: i32,
+    /// When the coding session started.
     pub start_time: chrono::NaiveDateTime,
+    /// Duration of the session in seconds.
     pub duration: i32,
+    /// Name of the project being worked on.
     pub project_name: Option<String>,
+    /// Programming language used.
     pub language: Option<String>,
+    /// Name of the editor/IDE.
     pub editor_name: Option<String>,
+    /// Hostname of the machine.
     pub hostname: Option<String>,
+    /// Whether this activity is hidden from friends and public view.
     pub hidden: bool,
 }
 
@@ -208,33 +241,51 @@ pub struct NewLeaderboardMember {
     pub admin: bool,
 }
 
+/// A member of a leaderboard with their stats.
 #[derive(Serialize, Clone, Debug, Deserialize, ToSchema)]
 pub struct PrivateLeaderboardMember {
+    /// Unique user identifier.
     pub id: i32,
+    /// The member's display name.
     pub username: String,
+    /// Whether the member is an admin of this leaderboard.
     pub admin: bool,
+    /// Total coding time in seconds (last 7 days).
     pub time_coded: i32,
 }
 
+/// Full leaderboard details including all members.
 #[derive(Serialize, Clone, Debug, Deserialize, ToSchema)]
 pub struct PrivateLeaderboard {
+    /// Name of the leaderboard.
     pub name: String,
+    /// Invite code for others to join (starts with ttlic_).
     pub invite: String,
+    /// When the leaderboard was created.
     pub creation_time: chrono::NaiveDateTime,
+    /// List of all members with their stats.
     pub members: Vec<PrivateLeaderboardMember>,
 }
 
+/// Coding time statistics over different time periods.
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash, ToSchema)]
 pub struct CodingTimeSteps {
+    /// Total coding time in seconds (all time).
     pub all_time: i32,
+    /// Coding time in seconds (last 30 days).
     pub past_month: i32,
+    /// Coding time in seconds (last 7 days).
     pub past_week: i32,
 }
 
+/// A user's current coding activity (if active).
 #[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Debug, Clone, ToSchema)]
 pub struct CurrentActivity {
+    /// When the current session started.
     pub started: chrono::NaiveDateTime,
+    /// Duration of the current session in seconds.
     pub duration: i64,
+    /// Details of what the user is working on.
     pub heartbeat: HeartBeat,
 }
 
@@ -244,20 +295,30 @@ pub struct FriendWithTime {
     pub coding_time: CodingTimeSteps,
 }
 
+/// Friend information with coding stats and current status.
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash, ToSchema)]
 pub struct FriendWithTimeAndStatus {
+    /// The friend's display name.
     pub username: String,
+    /// The friend's coding time statistics.
     pub coding_time: CodingTimeSteps,
+    /// The friend's current activity (if currently coding).
     pub status: Option<CurrentActivity>,
 }
 
+/// A heartbeat sent by editor extensions to track coding activity.
 #[derive(Deserialize, Serialize, ToSchema, Debug, Hash, Eq, PartialEq, Clone)]
 pub struct HeartBeat {
+    /// Name of the project being worked on.
     #[serde(deserialize_with = "project_deserialize")]
     pub project_name: Option<String>,
+    /// Programming language of the current file.
     pub language: Option<String>,
+    /// Name of the editor/IDE.
     pub editor_name: Option<String>,
+    /// Hostname of the machine.
     pub hostname: Option<String>,
+    /// Whether this activity should be hidden from friends and public view.
     pub hidden: Option<bool>,
 }
 

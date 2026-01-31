@@ -73,17 +73,26 @@ where
     }
 }
 
+/// Request body for user login.
 #[derive(Deserialize, Debug, ToSchema)]
 pub struct LoginRequest {
+    /// The user's username.
     pub username: String,
+    /// The user's password.
     pub password: String,
 }
 
+/// Authenticate user with username and password.
+///
+/// Returns the user's profile including their authentication token on successful login.
 #[utoipa::path(
     post,
     path = "/auth/login",
+    request_body = LoginRequest,
     responses(
-        (status = OK, body = SelfUser),
+        (status = OK, description = "Successfully authenticated", body = SelfUser),
+        (status = 400, description = "Password too long"),
+        (status = 401, description = "Invalid credentials"),
     )
 )]
 pub async fn login(
@@ -104,18 +113,28 @@ pub async fn login(
     }
 }
 
+/// Request body for user registration.
 #[derive(Deserialize, Debug, ToSchema)]
 pub struct RegisterRequest {
+    /// Desired username (2-32 alphanumeric characters).
     pub username: String,
+    /// Optional email address for account recovery.
     pub email: Option<String>,
+    /// Password (8-128 characters).
     pub password: String,
 }
 
+/// Create a new Testaustime account.
+///
+/// Username must be 2-32 alphanumeric characters. Password must be 8-128 characters.
 #[utoipa::path(
     post,
     path = "/auth/register",
+    request_body = RegisterRequest,
     responses(
-        (status = OK, body = NewUserIdentity)
+        (status = OK, description = "Account created successfully", body = NewUserIdentity),
+        (status = 400, description = "Invalid username or password length"),
+        (status = 409, description = "Username already taken"),
     )
 )]
 pub async fn register(
@@ -147,16 +166,23 @@ pub async fn register(
     Ok(Json(res))
 }
 
+/// Response containing the newly generated authentication token.
 #[derive(Serialize, ToSchema)]
 pub struct RegenerateResponse {
+    /// The new authentication token.
     pub token: String,
 }
 
+/// Generate a new authentication token.
+///
+/// Requires username and password verification. Invalidates the previous token.
 #[utoipa::path(
     post,
     path = "/auth/regenerate",
+    request_body = UserAuthentication,
     responses(
-        (status = OK, body = RegenerateResponse)
+        (status = OK, description = "New token generated", body = RegenerateResponse),
+        (status = 401, description = "Invalid credentials"),
     )
 )]
 pub async fn regenerate_auth_token(
@@ -176,19 +202,28 @@ pub async fn regenerate_auth_token(
     }
 }
 
+/// Request body for changing username.
 #[derive(Deserialize, ToSchema)]
 pub struct UsernameChangeRequest {
+    /// The new username (2-32 alphanumeric characters).
     pub new: String,
 }
 
+/// Update the authenticated user's username.
+///
+/// New username must be 2-32 alphanumeric characters and not already taken.
 #[utoipa::path(
     post,
     path = "/auth/change-username",
+    request_body = UsernameChangeRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Username changed successfully"),
+        (status = 400, description = "Invalid username format or length"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Username already taken"),
     )
 )]
 pub async fn change_username(
@@ -215,19 +250,26 @@ pub async fn change_username(
     result.map(|_| StatusCode::OK)
 }
 
+/// Request body for changing email address.
 #[derive(Deserialize, ToSchema)]
 pub struct EmailChangeRequest {
+    /// The new email address.
     pub new: String,
 }
 
+/// Update the authenticated user's email address.
 #[utoipa::path(
     post,
     path = "/auth/change-email",
+    request_body = EmailChangeRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Email changed successfully"),
+        (status = 400, description = "Invalid email format"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Email already taken"),
     )
 )]
 pub async fn change_email(
@@ -248,20 +290,29 @@ pub async fn change_email(
     result.map(|_| StatusCode::OK)
 }
 
+/// Request body for changing password.
 #[derive(Deserialize, ToSchema)]
 pub struct PasswordChangeRequest {
+    /// The current password for verification.
     pub old: String,
+    /// The new password (8-128 characters).
     pub new: String,
 }
 
+/// Update the authenticated user's password.
+///
+/// Requires the current password for verification. New password must be 8-128 characters.
 #[utoipa::path(
     post,
     path = "/auth/change-password",
+    request_body = PasswordChangeRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Password changed successfully"),
+        (status = 400, description = "Invalid password length"),
+        (status = 401, description = "Unauthorized or incorrect current password"),
     )
 )]
 pub async fn change_password(
@@ -286,16 +337,23 @@ pub async fn change_password(
     }
 }
 
+/// Request body for initiating password reset.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PasswordResetRequest {
+    /// The email address associated with the account.
     pub email: String,
 }
 
+/// Request a password reset email.
+///
+/// Sends a password reset link to the user's email if the account exists.
+/// Always returns OK to prevent email enumeration.
 #[utoipa::path(
     post,
     path = "/auth/reset-password",
+    request_body = PasswordResetRequest,
     responses(
-        (status = OK)
+        (status = OK, description = "Password reset email sent if account exists"),
     )
 )]
 pub async fn request_password_reset(
@@ -340,17 +398,25 @@ pub async fn request_password_reset(
     Ok(StatusCode::OK)
 }
 
+/// Request body for completing password reset.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PasswordResetCompletionRequest {
+    /// The new password to set.
     password: String,
+    /// The reset token received via email.
     token: String,
 }
 
+/// Complete password reset with token.
+///
+/// Completes the password reset process using the token from the reset email.
 #[utoipa::path(
     post,
     path = "/auth/complete-password-reset",
+    request_body = PasswordResetCompletionRequest,
     responses(
-        (status = OK)
+        (status = OK, description = "Password reset successfully"),
+        (status = 400, description = "Invalid or expired token"),
     )
 )]
 pub async fn reset_password(

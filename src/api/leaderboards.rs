@@ -12,29 +12,42 @@ use crate::{
 
 use super::users::MinimalLeaderboard;
 
+/// Request body for creating a leaderboard.
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct LeaderboardCreateRequest {
+    /// Name of the leaderboard (2-32 alphanumeric characters).
     pub name: String,
 }
 
+/// Request body specifying a leaderboard member.
 #[derive(Deserialize, ToSchema)]
 pub struct LeaderboardUser {
+    /// Username of the target member.
     pub user: String,
 }
 
+/// Response from leaderboard creation.
 #[derive(Serialize, ToSchema)]
 pub struct LeaderboardCreateResponse {
+    /// The invite code for others to join (starts with ttlic_).
     invite_code: String,
 }
 
+/// Create a new leaderboard.
+///
+/// Creates a leaderboard with the authenticated user as admin. Returns an invite code for others to join.
 #[utoipa::path(
     post,
     path = "/leaderboards/create",
+    request_body = LeaderboardCreateRequest,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = LeaderboardCreateResponse)
+        (status = OK, description = "Leaderboard created", body = LeaderboardCreateResponse),
+        (status = 400, description = "Invalid leaderboard name"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Leaderboard name already exists"),
     )
 )]
 pub async fn create_leaderboard(
@@ -65,6 +78,9 @@ pub async fn create_leaderboard(
     }
 }
 
+/// Get leaderboard details and members.
+///
+/// Returns the leaderboard with all members and their coding times. Only accessible to members.
 #[utoipa::path(
     get,
     path = "/leaderboards/{name}",
@@ -75,7 +91,9 @@ pub async fn create_leaderboard(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = PrivateLeaderboard)
+        (status = OK, description = "Leaderboard retrieved", body = PrivateLeaderboard),
+        (status = 401, description = "Unauthorized or not a member"),
+        (status = 404, description = "Leaderboard not found"),
     )
 )]
 pub async fn get_leaderboard(
@@ -96,6 +114,9 @@ pub async fn get_leaderboard(
     }
 }
 
+/// Delete a leaderboard.
+///
+/// Permanently deletes the leaderboard. Only accessible to admins.
 #[utoipa::path(
     delete,
     path = "/leaderboards/{name}",
@@ -106,7 +127,9 @@ pub async fn get_leaderboard(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Leaderboard deleted"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard not found"),
     )
 )]
 pub async fn delete_leaderboard(
@@ -127,19 +150,28 @@ pub async fn delete_leaderboard(
     }
 }
 
+/// Request body for joining a leaderboard.
 #[derive(Deserialize, Serialize, ToSchema)]
 pub struct LeaderboardInvite {
+    /// The invite code (starts with ttlic_).
     pub invite: String,
 }
 
+/// Join a leaderboard with invite code.
+///
+/// Invite codes start with `ttlic_`. Returns basic leaderboard info on success.
 #[utoipa::path(
     post,
     path = "/leaderboards/join",
+    request_body = LeaderboardInvite,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = MinimalLeaderboard)
+        (status = OK, description = "Joined leaderboard", body = MinimalLeaderboard),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Invalid invite code"),
+        (status = 409, description = "Already a member"),
     )
 )]
 pub async fn join_leaderboard(
@@ -166,6 +198,9 @@ pub async fn join_leaderboard(
     }
 }
 
+/// Leave a leaderboard.
+///
+/// Removes the user from the leaderboard. Admins cannot leave if they are the last admin.
 #[utoipa::path(
     post,
     path = "/leaderboards/{name}/leave",
@@ -176,7 +211,10 @@ pub async fn join_leaderboard(
         ("api_key" = []),
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Left leaderboard"),
+        (status = 400, description = "Cannot leave as last admin"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Leaderboard not found or not a member"),
     )
 )]
 pub async fn leave_leaderboard(
@@ -202,17 +240,23 @@ pub async fn leave_leaderboard(
     }
 }
 
+/// Promote a member to admin.
+///
+/// Only accessible to existing admins. The promoted user gains admin privileges.
 #[utoipa::path(
     post,
     path = "/leaderboards/{name}/promote",
     params(
         ("name", description = "Leaderboard name")
     ),
+    request_body = LeaderboardUser,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Member promoted to admin"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
     )
 )]
 pub async fn promote_member(
@@ -246,17 +290,23 @@ pub async fn promote_member(
     }
 }
 
+/// Demote an admin to member.
+///
+/// Only accessible to existing admins. The demoted user loses admin privileges.
 #[utoipa::path(
     post,
     path = "/leaderboards/{name}/demote",
     params(
         ("name", description = "Leaderboard name")
     ),
+    request_body = LeaderboardUser,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Admin demoted to member"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
     )
 )]
 pub async fn demote_member(
@@ -290,17 +340,23 @@ pub async fn demote_member(
     }
 }
 
+/// Remove a member from leaderboard.
+///
+/// Only accessible to admins. Removes the specified user from the leaderboard.
 #[utoipa::path(
     post,
     path = "/leaderboards/{name}/kick",
     params(
         ("name", description = "Leaderboard name")
     ),
+    request_body = LeaderboardUser,
     security(
         ("api_key" = [])
     ),
     responses(
-        (status = OK)
+        (status = OK, description = "Member removed from leaderboard"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
     )
 )]
 pub async fn kick_member(
@@ -329,11 +385,16 @@ pub async fn kick_member(
     }
 }
 
+/// Response containing the newly generated invite code.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct InviteCodeRegenerateResponse {
+    /// The new invite code (starts with ttlic_).
     invite_code: String,
 }
 
+/// Generate new leaderboard invite code.
+///
+/// Only accessible to admins. Invalidates the previous invite code.
 #[utoipa::path(
     post,
     path = "/leaderboards/{name}/regenerate",
@@ -344,7 +405,9 @@ pub struct InviteCodeRegenerateResponse {
         ("api_key" = [])
     ),
     responses(
-        (status = OK, body = InviteCodeRegenerateResponse)
+        (status = OK, description = "New invite code generated", body = InviteCodeRegenerateResponse),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard not found"),
     )
 )]
 pub async fn regenerate_invite(

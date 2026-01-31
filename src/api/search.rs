@@ -9,7 +9,9 @@ pub struct UserSearch {
     pub keyword: String,
 }
 
-//TODO: Maybe return small coding summary?
+/// Search for users with public profiles.
+///
+/// Searches usernames matching the keyword. Only returns users with public profiles.
 #[utoipa::path(
     get,
     path = "/search/users",
@@ -17,7 +19,7 @@ pub struct UserSearch {
         UserSearch
     ),
     responses(
-        (status = OK, body = Vec<PublicUser>)
+        (status = OK, description = "Search results", body = Vec<PublicUser>),
     )
 )]
 pub async fn search_public_users(

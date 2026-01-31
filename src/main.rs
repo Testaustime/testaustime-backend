@@ -97,6 +97,9 @@ impl Modify for SecurityAddon {
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("Bearer")
+                        .description(Some(
+                            "Authentication token obtained from /auth/login or /auth/register",
+                        ))
                         .build(),
                 ),
             )

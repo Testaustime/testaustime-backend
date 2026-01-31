@@ -44,11 +44,16 @@ static CLIENT_INFO: LazyLock<ClientInfo> = LazyLock::new(|| {
         .expect("Invalid Toml in settings.toml")
 });
 
+/// Handle TestausID OAuth callback.
+///
+/// Exchanges the OAuth authorization code for a token and authenticates the user.
+/// Sets a cookie with the authentication token and redirects to the frontend.
 #[utoipa::path(
     get,
     path = "/auth/callback",
     responses(
-        (status = OK)
+        (status = 308, description = "Redirects to frontend with auth cookie"),
+        (status = 400, description = "Invalid authorization code"),
     )
 )]
 pub async fn callback(
