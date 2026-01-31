@@ -44,6 +44,7 @@
               src = ./.;
               filter = path: type: (sqlFilter path type) || (craneLib.filterCargoSources path type);
             };
+            RUSTFLAGS = "-C link-arg=-Wl,-rpath,${pkgs.postgresql.lib}/lib";
           };
 
           cargoArtifacts = craneLib.buildDepsOnly (
