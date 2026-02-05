@@ -126,7 +126,8 @@ impl super::DatabaseWrapper {
 
         let aweekago = NaiveDateTime::new(
             Local::now().date_naive() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .expect("BUG: Always a valid time"),
         );
 
         let members =
@@ -305,7 +306,8 @@ impl super::DatabaseWrapper {
 
         let aweekago = NaiveDateTime::new(
             Local::now().date_naive() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .expect("BUG: Always a valid time"),
         );
 
         // FIXME: We could maybe use limit here because we only need the

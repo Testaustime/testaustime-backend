@@ -14,8 +14,9 @@ pub mod search;
 pub mod stats;
 pub mod users;
 
-pub static VALID_NAME_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("^[[:word:]]{2,32}$").unwrap());
+pub static VALID_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("^[[:word:]]{2,32}$").expect("BUG: Infallible, hardcoded and tested")
+});
 
 /// Check API health status.
 ///

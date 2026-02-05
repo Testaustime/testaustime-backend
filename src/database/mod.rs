@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use axum::extract::{FromRef, FromRequestParts};
 use diesel_async::{
-    AsyncPgConnection,
     pooled_connection::{
-        AsyncDieselConnectionManager,
         deadpool::{Object, Pool},
+        AsyncDieselConnectionManager,
     },
+    AsyncPgConnection,
 };
 use http::request::Parts;
 
-use crate::{TestaustimeState, error::TimeError};
+use crate::{error::TimeError, TestaustimeState};
 
 pub mod activity;
 pub mod auth;

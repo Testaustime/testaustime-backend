@@ -1,32 +1,36 @@
 use std::sync::Arc;
 
 use axum::{
-    Json,
     extract::{FromRequestParts, State},
+    Json,
 };
 use chrono::{Duration, Local};
-use http::{StatusCode, request::Parts};
+use http::{request::Parts, StatusCode};
 use lettre::{
-    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::header::ContentType,
+    message::header::ContentType, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    PasswordReset, PasswordResetState,
     api::users::UserAuthentication,
     auth::Authentication,
     database::DatabaseWrapper,
     error::TimeError,
     models::{NewUserIdentity, SelfUser, UserId, UserIdentity},
     utils::{generate_password_reset_token, validate_email},
+    PasswordReset, PasswordResetState,
 };
 
 impl<S: Send + Sync> FromRequestParts<S> for UserId {
     type Rejection = TimeError;
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let auth = parts.extensions.get::<Authentication>().cloned().unwrap();
+        let auth = parts
+            .extensions
+            .get::<Authentication>()
+            .cloned()
+            .expect("BUG: Every request should contain authentication, middleware issue");
 
         if let Authentication::AuthToken(user) = auth {
             Ok(UserId { id: user.id })
@@ -40,7 +44,11 @@ impl<S: Send + Sync> FromRequestParts<S> for UserIdentity {
     type Rejection = TimeError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let auth = parts.extensions.get::<Authentication>().cloned().unwrap();
+        let auth = parts
+            .extensions
+            .get::<Authentication>()
+            .cloned()
+            .expect("BUG: Every request should contain authentication, middleware issue");
 
         if let Authentication::AuthToken(user) = auth {
             Ok(user)
@@ -61,7 +69,11 @@ where
     type Rejection = TimeError;
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let auth = parts.extensions.get::<Authentication>().cloned().unwrap();
+        let auth = parts
+            .extensions
+            .get::<Authentication>()
+            .cloned()
+            .expect("BUG: Every request should contain authentication, middleware issue");
 
         if let Authentication::AuthToken(user) = auth {
             Ok(UserIdentityOptional {
@@ -326,10 +338,9 @@ pub async fn change_password(
         ));
     }
 
-    let testaustime_user = db.get_testaustime_user_by_id(user.id).await?;
     let k = db.verify_user_password(&user.username, &body.old).await?;
 
-    if k.is_some() || testaustime_user.password.iter().all(|n| *n == 0) {
+    if k.is_some() {
         db.change_password(user.id, &body.new).await?;
         Ok(StatusCode::OK)
     } else {
@@ -373,11 +384,12 @@ pub async fn request_password_reset(
     let token = generate_password_reset_token();
 
     let message = Message::builder()
-        .from("Testaustime <noreply@testaustime.fi>".parse().unwrap())
+        .from("Testaustime <noreply@testaustime.fi>".parse().expect("BUG: Infallible, email is hardcoded"))
         .to(format!("{} <{}>", user.username, email).parse().map_err(|_| TimeError::InvalidEmail)?)
         .subject("Testaustime password reset")
         .header(ContentType::TEXT_PLAIN)
-        .body(format!("Here is your testaustime password reset link: https://testaustime.fi/reset_password?token={token}")).unwrap();
+        .body(format!("Here is your testaustime password reset link: https://testaustime.fi/reset_password?token={token}"))
+        .expect("BUG: Infallible, everything is hardcoded and tested");
 
     tokio::spawn(async move {
         if let Err(err) = relay.send(message).await {

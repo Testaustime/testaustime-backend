@@ -1,7 +1,8 @@
+// FIXME: Care about this feature
 use std::{collections::HashMap, sync::LazyLock};
 
 use axum::{extract::Query, response::Redirect};
-use axum_extra::extract::{CookieJar, cookie::Cookie};
+use axum_extra::extract::{cookie::Cookie, CookieJar};
 use reqwest::Client;
 use serde_derive::Deserialize;
 

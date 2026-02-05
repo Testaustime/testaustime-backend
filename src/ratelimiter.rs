@@ -11,12 +11,12 @@ use axum::{
 };
 use futures_util::future::BoxFuture;
 use governor::{
-    RateLimiter, clock::DefaultClock, middleware::StateInformationMiddleware,
-    state::keyed::DefaultKeyedStateStore,
+    clock::DefaultClock, middleware::StateInformationMiddleware,
+    state::keyed::DefaultKeyedStateStore, RateLimiter,
 };
 use http::{
+    header::{HeaderName, FORWARDED},
     HeaderValue, StatusCode,
-    header::{FORWARDED, HeaderName},
 };
 use tower::{Layer, Service};
 
@@ -69,7 +69,7 @@ where
             let conn_info = req
                 .extensions()
                 .get::<ConnectInfo<SocketAddr>>()
-                .unwrap()
+                .expect("BUG: Tokio always provides connection info")
                 .ip();
 
             let bypass = req
@@ -111,13 +111,14 @@ where
 
                         headers.insert(
                             HeaderName::from_static("ratelimit-limit"),
-                            HeaderValue::from_str(&quota.burst_size().to_string()).unwrap(),
+                            HeaderValue::from_str(&quota.burst_size().to_string())
+                                .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
                         headers.insert(
                             HeaderName::from_static("ratelimit-remaining"),
                             HeaderValue::from_str(&state.remaining_burst_capacity().to_string())
-                                .unwrap(),
+                                .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
                         headers.insert(
@@ -125,7 +126,7 @@ where
                             HeaderValue::from_str(
                                 &quota.replenish_interval().as_secs().to_string(),
                             )
-                            .unwrap(),
+                            .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
                         Ok(res)
@@ -141,7 +142,7 @@ where
                             denied.quota().replenish_interval().as_secs().to_string(),
                         )
                         .body(Body::empty())
-                        .unwrap())
+                        .expect("BUG: Integer to String is always a valid HeaderValue"))
                 }),
             }
         } else {
@@ -149,7 +150,7 @@ where
                 Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Body::empty())
-                    .unwrap())
+                    .expect("BUG: Always valid"))
             })
         }
     }

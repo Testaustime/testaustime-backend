@@ -54,11 +54,9 @@ impl From<UserIdentity> for PublicUser {
 #[diesel(table_name = testaustime_users)]
 pub struct TestaustimeUser {
     pub id: i32,
-    #[serde(skip_serializing)]
-    pub password: Vec<u8>,
-    #[serde(skip_serializing)]
-    pub salt: Vec<u8>,
     pub identity: i32,
+    #[serde(skip_serializing)]
+    pub password: String,
 }
 
 use crate::schema::testaustime_users;
@@ -66,11 +64,9 @@ use crate::schema::testaustime_users;
 #[derive(Insertable, Serialize, Clone)]
 #[diesel(table_name = testaustime_users)]
 pub struct NewTestaustimeUser {
-    #[serde(skip_serializing)]
-    pub password: Vec<u8>,
-    #[serde(skip_serializing)]
-    pub salt: Vec<u8>,
     pub identity: i32,
+    #[serde(skip_serializing)]
+    pub password: String,
 }
 
 /// Full user profile returned to the authenticated user.

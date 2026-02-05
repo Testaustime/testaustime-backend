@@ -1,4 +1,4 @@
-use axum::{Json, extract::Path};
+use axum::{extract::Path, Json};
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};

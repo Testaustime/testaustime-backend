@@ -58,9 +58,8 @@ diesel::table! {
 diesel::table! {
     testaustime_users (id) {
         id -> Int4,
-        password -> Bytea,
-        salt -> Bytea,
         identity -> Int4,
+        password -> Text,
     }
 }
 

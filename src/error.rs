@@ -1,6 +1,6 @@
 use axum::{
-    Json,
     response::{IntoResponse, Response},
+    Json,
 };
 use http::StatusCode;
 use thiserror::Error;
@@ -69,6 +69,8 @@ pub enum TimeError {
     EmailTaken,
     #[error("Password hashing failed")]
     HashError(#[from] argon2::password_hash::Error),
+    #[error(transparent)]
+    HeaderError(#[from] http::header::ToStrError),
 }
 
 impl IntoResponse for TimeError {
@@ -83,7 +85,8 @@ impl IntoResponse for TimeError {
             | TimeError::BadId
             | TimeError::BadLeaderboardName
             | TimeError::InvalidEmail
-            | TimeError::BadCode => StatusCode::BAD_REQUEST,
+            | TimeError::BadCode
+            | TimeError::HeaderError(_) => StatusCode::BAD_REQUEST,
             TimeError::CurrentUser | TimeError::NotMember | TimeError::LastAdmin => {
                 StatusCode::FORBIDDEN
             }

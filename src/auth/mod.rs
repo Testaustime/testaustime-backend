@@ -7,7 +7,7 @@ use axum::extract::Request;
 use futures_util::future::BoxFuture;
 use tower::{Layer, Service};
 
-use crate::{TestaustimeState, database::DatabaseWrapper, models::UserIdentity};
+use crate::{database::DatabaseWrapper, models::UserIdentity, TestaustimeState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {
@@ -74,7 +74,11 @@ where
                     break 'auth Authentication::NoAuth;
                 };
 
-                let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") else {
+                let Some(token) = auth
+                    .to_str()
+                    .ok()
+                    .and_then(|a| a.trim().strip_prefix("Bearer "))
+                else {
                     break 'auth Authentication::NoAuth;
                 };
 

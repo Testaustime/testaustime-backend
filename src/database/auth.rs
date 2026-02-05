@@ -1,6 +1,6 @@
 use argon2::{
-    Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    Algorithm, Argon2, Params, PasswordHash, PasswordVerifier, Version,
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
@@ -65,16 +65,13 @@ impl super::DatabaseWrapper {
         let argon2 = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
-            Params::new(4096, 3, 1, None).unwrap(),
+            Params::new(4096, 3, 1, None).expect("BUG: Hardcoded params, wont change"),
         );
-        let salt = SaltString::from_b64(std::str::from_utf8(&tuser.salt).expect("Infallible"))?;
 
-        let password_hash = argon2.hash_password(password.as_bytes(), &salt)?;
+        let hash = PasswordHash::new(&tuser.password)
+            .expect("BUG: This is valid if it was succesfully inserted into database");
 
-        if password_hash
-            .hash
-            .is_some_and(|p| p.as_bytes() == tuser.password)
-        {
+        if argon2.verify_password(password.as_bytes(), &hash).is_ok() {
             Ok(Some(user))
         } else {
             Ok(None)
@@ -109,11 +106,13 @@ impl super::DatabaseWrapper {
         let argon2 = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
-            Params::new(4096, 3, 1, None).unwrap(),
+            Params::new(4096, 3, 1, None).expect("BUG: Hardcoded params, wont change"),
         );
-        let password_hash = argon2.hash_password(password.as_bytes(), &salt).unwrap();
+
+        let hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .expect("BUG: Hashing failed on sanitized output");
         let token = generate_auth_token();
-        let hash = password_hash.hash.unwrap();
         let new_user = NewUserIdentity {
             auth_token: token,
             registration_time: chrono::Local::now().naive_local(),
@@ -139,8 +138,7 @@ impl super::DatabaseWrapper {
                         .map_err(|_| TimeError::UsernameTaken)?;
 
                     let testaustime_user = NewTestaustimeUser {
-                        password: hash.as_bytes().to_vec(),
-                        salt: salt.as_str().as_bytes().to_vec(),
+                        password: hash.to_string(),
                         identity: id[0],
                     };
 
@@ -190,23 +188,19 @@ impl super::DatabaseWrapper {
         let argon2 = Argon2::new(
             Algorithm::Argon2id,
             Version::V0x13,
-            Params::new(4096, 3, 1, None).unwrap(),
+            Params::new(4096, 3, 1, None).expect("BUG: Hardcoded params, wont change"),
         );
 
-        let password_hash = argon2
+        let hash = argon2
             .hash_password(new_password.as_bytes(), &new_salt)
-            .unwrap();
-        let new_hash = password_hash.hash.unwrap();
+            .expect("BUG: Hashing failed on sanitized output");
 
         let mut conn = self.db.get().await?;
 
         use crate::schema::testaustime_users::dsl::*;
         diesel::update(crate::schema::testaustime_users::table)
             .filter(identity.eq(user))
-            .set((
-                password.eq(&new_hash.as_bytes()),
-                salt.eq(new_salt.as_str().as_bytes()),
-            ))
+            .set((password.eq(&hash.to_string()),))
             .execute(&mut conn)
             .await?;
 
@@ -243,16 +237,6 @@ impl super::DatabaseWrapper {
         };
 
         Ok(user)
-    }
-
-    pub async fn get_testaustime_user_by_id(&self, uid: i32) -> Result<TestaustimeUser, TimeError> {
-        use crate::schema::testaustime_users::dsl::*;
-        let mut conn = self.db.get().await?;
-
-        Ok(testaustime_users
-            .filter(identity.eq(uid))
-            .first::<TestaustimeUser>(&mut conn)
-            .await?)
     }
 
     // FIXME: Use transactions

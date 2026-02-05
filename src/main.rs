@@ -15,12 +15,12 @@ use std::{net::SocketAddr, num::NonZeroU32, sync::Arc};
 
 use api::activity::HeartBeatMemoryStore;
 use auth::{AuthMiddleware, Authentication};
-use axum::{Router, body::Body};
+use axum::{body::Body, Router};
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::Database;
 use governor::{Quota, RateLimiter};
-use lettre::{AsyncSmtpTransport, Tokio1Executor, transport::smtp::authentication::Credentials};
+use lettre::{transport::smtp::authentication::Credentials, AsyncSmtpTransport, Tokio1Executor};
 use models::UserIdentity;
 use ratelimiter::TestaustimeRateLimiter;
 use serde_derive::Deserialize;
@@ -28,8 +28,8 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::{
-    Modify, OpenApi,
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi,
 };
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
@@ -148,14 +148,14 @@ fn create_router_with_openapi(config: &TestaustimeConfig) -> (Router, utoipa::op
 
     let ratelimiter = Arc::new(
         RateLimiter::keyed(Quota::per_minute(
-            NonZeroU32::new(config.max_requests_per_min).unwrap(),
+            NonZeroU32::new(config.max_requests_per_min).expect("Ratelimit set to 0"),
         ))
         .with_middleware(),
     );
 
     let register_ratelimiter = Arc::new(
         RateLimiter::keyed(Quota::per_hour(
-            NonZeroU32::new(config.max_registers_per_hour).unwrap(),
+            NonZeroU32::new(config.max_registers_per_hour).expect("Ratelimit set to 0"),
         ))
         .with_middleware(),
     );
@@ -264,7 +264,7 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&config.address)
         .await
-        .unwrap();
+        .unwrap_or_else(|_| panic!("Could not bind to address {}", &config.address));
 
     info!("Staring server on {}", config.address);
 
@@ -273,5 +273,5 @@ async fn main() {
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
-    .unwrap();
+    .expect("BUG: Could not start server");
 }
