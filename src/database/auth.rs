@@ -1,6 +1,6 @@
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Algorithm, Argon2, Params, PasswordHash, PasswordVerifier, Version,
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;

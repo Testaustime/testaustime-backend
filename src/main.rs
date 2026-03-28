@@ -15,14 +15,14 @@ use std::{net::SocketAddr, num::NonZeroU32, sync::Arc};
 
 use api::activity::HeartBeatMemoryStore;
 use auth::{AuthMiddleware, Authentication};
-use axum::{body::Body, Router};
+use axum::{Router, body::Body};
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::Database;
 use diesel::prelude::*;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use governor::{Quota, RateLimiter};
-use lettre::{transport::smtp::authentication::Credentials, AsyncSmtpTransport, Tokio1Executor};
+use lettre::{AsyncSmtpTransport, Tokio1Executor, transport::smtp::authentication::Credentials};
 use models::UserIdentity;
 use ratelimiter::TestaustimeRateLimiter;
 use serde_derive::Deserialize;
@@ -30,8 +30,8 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::{
-    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
     Modify, OpenApi,
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;

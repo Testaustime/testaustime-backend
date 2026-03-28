@@ -38,8 +38,12 @@
 
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
 
+          sqlFilter = path: _type: builtins.match ".*\\.sql$" path != null;
           commonArgs = {
-            src = craneLib.cleanCargoSource ./.;
+            src = pkgs.lib.cleanSourceWith {
+              src = ./.;
+              filter = path: type: (sqlFilter path type) || (craneLib.filterCargoSources path type);
+            };
           };
 
           cargoArtifacts = craneLib.buildDepsOnly (
