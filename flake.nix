@@ -120,17 +120,7 @@
           docker = pkgs.dockerTools.buildLayeredImage {
             name = "ghcr.io/testaustime/testaustime-backend";
             tag = "nix";
-            config.Cmd =
-              let
-                entrypoint = pkgs.writeShellScriptBin "entrypoint.sh" ''
-                  while [ 1 ];
-                  do
-                      ${pkgs.diesel-cli}/bin/diesel database setup --migration-dir ${./migrations} && break;
-                  done
-                  ${testaustime-backend}/bin/testaustime
-                '';
-              in
-              [ "./${entrypoint}/bin/entrypoint.sh" ];
+            config.Cmd = [ "${testaustime-backend}/bin/testaustime" ];
           };
         }
       );

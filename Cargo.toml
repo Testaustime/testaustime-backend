@@ -58,8 +58,9 @@ url = "2.2"
 
 itertools = "0.14"
 governor = "0.10.0"
-diesel = { version = "2.1.0", features = ["chrono", "serde_json"] }
+diesel = { version = "2.1.0", features = ["chrono", "serde_json", "postgres"] }
 diesel-async = { version = "0.7", features = ["postgres", "deadpool"] }
+diesel_migrations = "2.2"
 lettre = { version = "0.11.14", default-features = false, features = [
   "tokio1-rustls-tls",
   "tracing",

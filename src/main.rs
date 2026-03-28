@@ -19,6 +19,8 @@ use axum::{body::Body, Router};
 use chrono::NaiveDateTime;
 use dashmap::DashMap;
 use database::Database;
+use diesel::prelude::*;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use governor::{Quota, RateLimiter};
 use lettre::{transport::smtp::authentication::Credentials, AsyncSmtpTransport, Tokio1Executor};
 use models::UserIdentity;
@@ -42,6 +44,8 @@ extern crate diesel;
 
 #[macro_use]
 extern crate serde_json;
+
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 #[derive(Debug, Deserialize)]
 pub struct TestaustimeConfig {
@@ -257,6 +261,33 @@ async fn main() {
     let config: TestaustimeConfig =
         toml::from_str(&std::fs::read_to_string("settings.toml").expect("Missing settings.toml"))
             .expect("Invalid Toml in settings.toml");
+
+    {
+        use diesel::result::{DatabaseErrorKind, Error as DieselError};
+
+        let mut db_url = url::Url::parse(&config.database_url).expect("Invalid database URL");
+        let db_name = db_url.path().trim_start_matches('/').to_owned();
+
+        db_url.set_path("/postgres");
+        let mut admin_conn = diesel::pg::PgConnection::establish(db_url.as_str())
+            .expect("Failed to connect to PostgreSQL server");
+
+        let create_db = format!("CREATE DATABASE \"{}\"", db_name.replace('"', "\"\""));
+        match diesel::sql_query(&create_db).execute(&mut admin_conn) {
+            Ok(_) => info!("Created database \"{db_name}\""),
+            Err(DieselError::DatabaseError(DatabaseErrorKind::Unknown, ref info))
+                if info.message().contains("already exists") => {}
+            Err(e) => panic!("Failed to create database: {e}"),
+        }
+
+        drop(admin_conn);
+
+        info!("Running pending database migrations");
+        let mut conn = diesel::pg::PgConnection::establish(&config.database_url)
+            .expect("Failed to connect to database for migrations");
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("Failed to run database migrations");
+    }
 
     let (router, openapi) = create_router_with_openapi(&config);
     let router =
