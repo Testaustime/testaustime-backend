@@ -163,12 +163,13 @@
       devShells = forEachSystem (
         system:
         let
-          inherit (perSystem system) pkgs toolchain treefmtEval;
+          inherit (perSystem system) pkgs craneLib treefmtEval;
         in
         {
-          default = pkgs.mkShell {
+          default = craneLib.devShell {
+            checks = self.checks.${system};
+
             packages = [
-              toolchain
               pkgs.diesel-cli
               treefmtEval.config.build.wrapper
             ];
