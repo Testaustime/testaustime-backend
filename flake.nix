@@ -30,8 +30,11 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
 
-          # Use default toolchain to include clippy and rustfmt
-          toolchain = fenix.packages.${system}.default.toolchain;
+          # Use toolchain specified in rust-toolchain.toml
+          toolchain = fenix.packages.${system}.fromToolchainFile {
+            file = ./rust-toolchain.toml;
+            sha256 = "sha256-zC8E38iDVJ1oPIzCqTk/Ujo9+9kx9dXq7wAwPMpkpg0=";
+          };
 
           craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
 
