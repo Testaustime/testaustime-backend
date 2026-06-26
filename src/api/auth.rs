@@ -162,7 +162,7 @@ pub async fn register(
         return Err(TimeError::BadUsername);
     }
 
-    if data.email.as_ref().is_some_and(|e| validate_email(e)) {
+    if data.email.as_ref().is_some_and(|e| !validate_email(e)) {
         return Err(TimeError::InvalidEmail);
     }
 
