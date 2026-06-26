@@ -1,23 +1,40 @@
-use actix_web::{web, HttpResponse, Responder};
+use axum::Json;
+use http::StatusCode;
 use serde_derive::Deserialize;
+use utoipa::ToSchema;
 
-use crate::{api::auth::SecuredUserIdentity, database::DatabaseWrapper, error::TimeError};
+use crate::{database::DatabaseWrapper, error::TimeError, models::UserIdentity};
 
-#[derive(Deserialize)]
+/// Request body for updating account settings.
+#[derive(Deserialize, ToSchema)]
 pub struct Settings {
+    /// Whether the user's profile should be publicly visible.
     public_profile: Option<bool>,
 }
 
-#[post("/account/settings")]
+/// Update account settings.
+///
+/// Currently supports toggling public profile visibility.
+#[utoipa::path(
+    post,
+    path = "/account/settings",
+    request_body = Settings,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Settings updated"),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub async fn change_settings(
-    settings: web::Json<Settings>,
-    userid: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+    settings: Json<Settings>,
+) -> Result<StatusCode, TimeError> {
     if let Some(public_profile) = settings.public_profile {
-        db.change_visibility(userid.identity.id, public_profile)
-            .await?;
+        db.change_visibility(user.id, public_profile).await?;
     };
 
-    Ok(HttpResponse::Ok())
+    Ok(StatusCode::OK)
 }

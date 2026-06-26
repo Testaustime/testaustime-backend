@@ -1,85 +1,173 @@
-use actix_web::{
-    error::*,
-    web::{self, Data, Path, Query},
-    HttpResponse, Responder,
+use std::{collections::HashMap, sync::Arc};
+
+use axum::{
+    Json,
+    extract::{Path, Query, State},
 };
-use chrono::{Duration, Local};
+use chrono::{DateTime, Duration, Local, Utc, serde::ts_seconds_option};
+use http::StatusCode;
+use serde::Serialize;
 use serde_derive::Deserialize;
+use utoipa::ToSchema;
 
 use crate::{
     api::{activity::HeartBeatMemoryStore, auth::UserIdentityOptional},
     database::DatabaseWrapper,
     error::TimeError,
-    models::{CurrentActivity, PrivateLeaderboardMember, UserId, UserIdentity},
-    requests::DataRequest,
+    models::{CodingActivity, CurrentActivity, PrivateLeaderboardMember, UserId, UserIdentity},
     utils::group_by_language,
 };
 
-#[derive(Deserialize)]
-pub struct UserAuthentication {
-    pub username: String,
-    pub password: String,
+#[derive(Deserialize, Debug)]
+pub struct DataRequest {
+    #[serde(default)]
+    #[serde(with = "ts_seconds_option")]
+    pub from: Option<DateTime<Utc>>,
+    #[serde(default)]
+    #[serde(with = "ts_seconds_option")]
+    pub to: Option<DateTime<Utc>>,
+    pub min_duration: Option<i32>,
+    pub editor_name: Option<String>,
+    pub language: Option<String>,
+    pub hostname: Option<String>,
+    pub project_name: Option<String>,
 }
 
-#[get("/users/@me")]
-pub async fn my_profile(user: UserIdentity) -> Result<impl Responder, TimeError> {
-    Ok(web::Json(user))
+/// Get the authenticated user's profile.
+///
+/// Returns the user's identity including username, friend code, and registration time.
+#[utoipa::path(
+    get,
+    path = "/users/@me",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "User profile retrieved", body = UserIdentity),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
+pub async fn my_profile(user: UserIdentity) -> Result<Json<UserIdentity>, TimeError> {
+    Ok(Json(user))
 }
 
-#[derive(serde::Serialize)]
+/// Leaderboard summary for the user's leaderboard list.
+#[derive(Serialize, ToSchema)]
 pub struct ListLeaderboard {
+    /// Name of the leaderboard.
     pub name: String,
+    /// Total number of members in the leaderboard.
     pub member_count: i32,
+    /// The member with the most coding time.
     pub top_member: PrivateLeaderboardMember,
+    /// The authenticated user's position (1-indexed).
     pub my_position: i32,
+    /// The authenticated user's member info.
     pub me: PrivateLeaderboardMember,
 }
 
-#[derive(serde::Serialize)]
+/// Basic leaderboard information.
+#[derive(Serialize, ToSchema)]
 pub struct MinimalLeaderboard {
+    /// Name of the leaderboard.
     pub name: String,
+    /// Total number of members in the leaderboard.
     pub member_count: i32,
 }
 
-#[get("/users/@me/leaderboards")]
+/// Get leaderboards the user is a member of.
+///
+/// Returns a list of leaderboards with member count, top member, and user's position.
+#[utoipa::path(
+    get,
+    path = "/users/@me/leaderboards",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Leaderboards retrieved", body = Vec<ListLeaderboard>),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub async fn my_leaderboards(
     user: UserId,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
-    Ok(web::Json(db.get_user_leaderboards(user.id).await?))
+) -> Result<Json<Vec<ListLeaderboard>>, TimeError> {
+    Ok(Json(db.get_user_leaderboards(user.id).await?))
 }
 
-#[delete("/users/@me/delete")]
+/// Credentials for user authentication.
+#[derive(Deserialize, ToSchema)]
+pub struct UserAuthentication {
+    /// The user's username.
+    pub username: String,
+    /// The user's password.
+    pub password: String,
+}
+
+/// Delete a user account.
+///
+/// Requires username and password verification. This action is irreversible.
+#[utoipa::path(
+    delete,
+    path = "/users/@me/delete",
+    request_body = UserAuthentication,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Account deleted successfully"),
+        (status = 401, description = "Invalid credentials"),
+    )
+)]
 pub async fn delete_user(
     db: DatabaseWrapper,
-    user: web::Json<UserAuthentication>,
-) -> Result<impl Responder, TimeError> {
+    user: Json<UserAuthentication>,
+) -> Result<StatusCode, TimeError> {
     if let Some(user) = db
         .verify_user_password(&user.username, &user.password)
         .await?
     {
         db.delete_user(user.id).await?;
+        Ok(StatusCode::OK)
+    } else {
+        Err(TimeError::Unauthorized)
     }
-
-    Ok(HttpResponse::Ok().finish())
 }
 
-#[get("/users/{username}/activity/current")]
+/// Get a user's current coding activity.
+///
+/// Returns the user's current coding session if active. Use `@me` for the authenticated user.
+/// Accessible for public profiles, friends, or the authenticated user.
+#[utoipa::path(
+    get,
+    path = "/users/{username}/activity/current",
+    params(
+        ("username", description = "Username or @me for self"),
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Current activity retrieved", body = Option<CurrentActivity>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found or not currently active"),
+    )
+)]
 pub async fn get_current_activity(
-    path: Path<(String,)>,
+    Path(name): Path<String>,
     opt_user: UserIdentityOptional,
     db: DatabaseWrapper,
-    heartbeats: Data<HeartBeatMemoryStore>,
-) -> Result<impl Responder, TimeError> {
-    let mut is_self: bool = false;
-    let target_user = if let Some(user) = opt_user.identity {
-        if path.0 == "@me" {
-            is_self = true;
+    State(heartbeats): State<Arc<HeartBeatMemoryStore>>,
+) -> Result<Json<Option<CurrentActivity>>, TimeError> {
+    let mut is_self = false;
 
+    let target_user = if let Some(user) = opt_user.identity {
+        if name == "@me" {
             user.id
         } else {
             let target_user = db
-                .get_user_by_name(&path.0)
+                .get_user_by_name(&name)
                 .await
                 .map_err(|_| TimeError::UserNotFound)?;
 
@@ -95,7 +183,7 @@ pub async fn get_current_activity(
         }
     } else {
         let target_user = db
-            .get_user_by_name(&path.0)
+            .get_user_by_name(&name)
             .await
             .map_err(|_| TimeError::UserNotFound)?;
 
@@ -113,8 +201,7 @@ pub async fn get_current_activity(
             let curtime = Local::now().naive_local();
             if curtime.signed_duration_since(start + duration) > Duration::seconds(900) {
                 db.add_activity(target_user, inner_heartbeat, start, duration)
-                    .await
-                    .map_err(ErrorInternalServerError)?;
+                    .await?;
 
                 heartbeats.remove(&target_user);
                 Err(TimeError::NotActive)
@@ -129,42 +216,58 @@ pub async fn get_current_activity(
                     current_heartbeat.heartbeat.project_name = Some(String::from("hidden"));
                 }
 
-                Ok(web::Json(Some(current_heartbeat)))
+                Ok(Json(Some(current_heartbeat)))
             }
         }
         None => Err(TimeError::NotActive),
     }
 }
 
-#[get("/users/{username}/activity/data")]
+/// Get a user's coding activity history.
+///
+/// Returns all coding activities with optional filtering by date range, duration, editor, language, hostname, or project.
+/// Use `@me` for the authenticated user. Accessible for public profiles, friends, or the authenticated user.
+#[utoipa::path(
+    get,
+    path = "/users/{username}/activity/data",
+    params(
+        ("username", description = "Username or @me for self"),
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Activity history retrieved", body = Vec<CodingActivity>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found"),
+    )
+)]
 pub async fn get_activities(
-    Query(data): Query<DataRequest>,
-    path: Path<(String,)>,
-    opt_user: UserIdentityOptional,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+    Query(data): Query<DataRequest>,
+    Path(name): Path<String>,
+    opt_user: UserIdentityOptional,
+) -> Result<Json<Vec<CodingActivity>>, TimeError> {
     let Some(user) = opt_user.identity else {
         let target_user = db
-            .get_user_by_name(&path.0)
+            .get_user_by_name(&name)
             .await
             .map_err(|_| TimeError::UserNotFound)?;
 
         if target_user.is_public {
-            return Ok(web::Json(
-                db.get_activity(data, target_user.id, false).await?,
-            ));
+            return Ok(Json(db.get_activity(data, target_user.id, false).await?));
         } else {
             return Err(TimeError::UserNotFound);
         };
     };
 
-    let data = if path.0 == "@me" {
+    let data: Vec<CodingActivity> = if name == "@me" {
         db.get_activity(data, user.id, true).await?
     } else {
         //FIXME: This is technically not required when the username equals the username of the
         //authenticated user
         let target_user = db
-            .get_user_by_name(&path.0)
+            .get_user_by_name(&name)
             .await
             .map_err(|_| TimeError::UserNotFound)?;
 
@@ -179,21 +282,59 @@ pub async fn get_activities(
         }
     };
 
-    Ok(web::Json(data))
+    Ok(Json(data))
 }
 
-#[get("/users/{username}/activity/summary")]
+/// Coding time breakdown by programming language.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct LanguageSummary {
+    /// Map of language name to coding time in seconds.
+    languages: HashMap<String, i32>,
+    /// Total coding time in seconds.
+    total: i32,
+}
+
+/// Summary of coding activity over different time periods.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ActivitySummary {
+    /// Coding time breakdown for the last 7 days.
+    last_week: LanguageSummary,
+    /// Coding time breakdown for the last 30 days.
+    last_month: LanguageSummary,
+    /// Coding time breakdown for all time.
+    all_time: LanguageSummary,
+}
+
+/// Get a summary of a user's coding activity.
+///
+/// Returns aggregated coding time by language for last week, last month, and all time.
+/// Use `@me` for the authenticated user. Accessible for public profiles, friends, or the authenticated user.
+#[utoipa::path(
+    get,
+    path = "/users/{username}/activity/summary",
+    params(
+        ("username", description = "Username or @me for self")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Activity summary retrieved", body = ActivitySummary),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found"),
+    )
+)]
 pub async fn get_activity_summary(
-    path: Path<(String,)>,
+    Path(path): Path<String>,
     opt_user: UserIdentityOptional,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+) -> Result<Json<ActivitySummary>, TimeError> {
     let data = if let Some(user) = opt_user.identity {
-        if path.0 == "@me" {
+        if path == "@me" {
             db.get_all_activity(user.id).await?
         } else {
             let target_user = db
-                .get_user_by_name(&path.0)
+                .get_user_by_name(&path)
                 .await
                 .map_err(|_| TimeError::UserNotFound)?;
 
@@ -208,7 +349,7 @@ pub async fn get_activity_summary(
         }
     } else {
         let target_user = db
-            .get_user_by_name(&path.0)
+            .get_user_by_name(&path)
             .await
             .map_err(|_| TimeError::UserNotFound)?;
 
@@ -233,20 +374,18 @@ pub async fn get_activity_summary(
             .filter(|d| now.signed_duration_since(d.start_time) < Duration::days(7)),
     );
 
-    let langs = serde_json::json!({
-        "last_week": {
-            "languages": last_week,
-            "total": last_week.values().sum::<i32>(),
+    Ok(Json(ActivitySummary {
+        last_week: LanguageSummary {
+            total: last_week.values().sum::<i32>(),
+            languages: last_week,
         },
-        "last_month": {
-            "languages": last_month,
-            "total": last_month.values().sum::<i32>(),
+        last_month: LanguageSummary {
+            total: last_month.values().sum::<i32>(),
+            languages: last_month,
         },
-        "all_time": {
-            "languages": all_time,
-            "total": all_time.values().sum::<i32>(),
+        all_time: LanguageSummary {
+            total: all_time.values().sum::<i32>(),
+            languages: all_time,
         },
-    });
-
-    Ok(web::Json(langs))
+    }))
 }

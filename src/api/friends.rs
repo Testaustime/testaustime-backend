@@ -1,26 +1,50 @@
-use actix_web::{
-    error::*,
-    web::{self, Data},
-    HttpResponse, Responder,
-};
+use std::sync::Arc;
+
+use axum::{Json, extract::State};
 use diesel::result::DatabaseErrorKind;
+use http::StatusCode;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
-    api::{activity::HeartBeatMemoryStore, auth::SecuredUserIdentity},
+    api::activity::HeartBeatMemoryStore,
     database::DatabaseWrapper,
     error::TimeError,
-    models::{CurrentActivity, FriendWithTimeAndStatus, UserId},
+    models::{CurrentActivity, FriendWithTimeAndStatus, UserId, UserIdentity},
 };
 
-#[post("/friends/add")]
+/// Request body for adding a friend.
+#[derive(Deserialize, Debug, ToSchema)]
+pub struct FriendRequest {
+    /// The friend code (starts with ttfc_).
+    pub code: String,
+}
+
+/// Add a friend using their friend code.
+///
+/// Friend codes start with `ttfc_`. Returns the friend's profile with coding stats.
+#[utoipa::path(
+    post,
+    path = "/friends/add",
+    request_body = FriendRequest,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Friend added successfully", body = FriendWithTimeAndStatus),
+        (status = 400, description = "Invalid friend code"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Already friends"),
+    )
+)]
 pub async fn add_friend(
     user: UserId,
-    body: String,
     db: DatabaseWrapper,
-    heartbeats: Data<HeartBeatMemoryStore>,
-) -> Result<impl Responder, TimeError> {
+    State(heartbeats): State<Arc<HeartBeatMemoryStore>>,
+    Json(body): Json<FriendRequest>,
+) -> Result<Json<FriendWithTimeAndStatus>, TimeError> {
     match db
-        .add_friend(user.id, body.trim().trim_start_matches("ttfc_").to_string())
+        .add_friend(user.id, body.code.trim_start_matches("ttfc_").to_string())
         .await
     {
         // This is not correct
@@ -52,17 +76,30 @@ pub async fn add_friend(
                 }),
             };
 
-            Ok(web::Json(friend_with_time))
+            Ok(Json(friend_with_time))
         }
     }
 }
 
-#[get("/friends/list")]
+/// Get list of friends with coding stats.
+///
+/// Returns all friends with their coding time and current activity status.
+#[utoipa::path(
+    get,
+    path = "/friends/list",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Friends list retrieved", body = Vec<FriendWithTimeAndStatus>),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub async fn get_friends(
     user: UserId,
     db: DatabaseWrapper,
-    heartbeats: Data<HeartBeatMemoryStore>,
-) -> Result<impl Responder, TimeError> {
+    State(heartbeats): State<Arc<HeartBeatMemoryStore>>,
+) -> Result<Json<Vec<FriendWithTimeAndStatus>>, TimeError> {
     let friends = db
         .get_friends_with_time(user.id)
         .await
@@ -86,31 +123,73 @@ pub async fn get_friends(
         })
         .collect::<Vec<_>>();
 
-    Ok(web::Json(friends))
+    Ok(Json(friends))
 }
 
-#[post("/friends/regenerate")]
+/// Response containing the newly generated friend code.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RegenerateFriendCodeResponse {
+    /// The new friend code (starts with ttfc_).
+    friend_code: String,
+}
+
+/// Generate a new friend code.
+///
+/// Invalidates the previous friend code. Others must use the new code to add you as a friend.
+#[utoipa::path(
+    post,
+    path = "/friends/regenerate",
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "New friend code generated", body = RegenerateFriendCodeResponse),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub async fn regenerate_friend_code(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
-    db.regenerate_friend_code(user.identity.id)
+) -> Result<Json<RegenerateFriendCodeResponse>, TimeError> {
+    db.regenerate_friend_code(user.id)
         .await
         .inspect_err(|e| error!("{}", e))
-        .map(|code| web::Json(json!({ "friend_code": code })))
+        .map(|c| Json(RegenerateFriendCodeResponse { friend_code: c }))
 }
 
-#[delete("/friends/remove")]
+/// Request body for removing a friend.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct RemoveFriendRequest {
+    /// Username of the friend to remove.
+    name: String,
+}
+
+/// Remove a friend.
+///
+/// Removes the friendship in both directions.
+#[utoipa::path(
+    delete,
+    path = "/friends/remove",
+    request_body = RemoveFriendRequest,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Friend removed"),
+        (status = 400, description = "Friend not found"),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 pub async fn remove(
-    user: SecuredUserIdentity,
+    user: UserIdentity,
     db: DatabaseWrapper,
-    body: String,
-) -> Result<impl Responder, TimeError> {
-    let friend = db.get_user_by_name(&body).await?;
-    let deleted = db.remove_friend(user.identity.id, friend.id).await?;
+    Json(body): Json<RemoveFriendRequest>,
+) -> Result<StatusCode, TimeError> {
+    let friend = db.get_user_by_name(&body.name).await?;
+    let deleted = db.remove_friend(user.id, friend.id).await?;
 
     if deleted {
-        Ok(HttpResponse::Ok().finish())
+        Ok(StatusCode::OK)
     } else {
         Err(TimeError::BadId)
     }

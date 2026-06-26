@@ -8,11 +8,11 @@ diesel::table! {
         duration -> Int4,
         #[max_length = 64]
         project_name -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         language -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         editor_name -> Nullable<Varchar>,
-        #[max_length = 32]
+        #[max_length = 64]
         hostname -> Nullable<Varchar>,
         hidden -> Bool,
     }
@@ -58,9 +58,8 @@ diesel::table! {
 diesel::table! {
     testaustime_users (id) {
         id -> Int4,
-        password -> Bytea,
-        salt -> Bytea,
         identity -> Int4,
+        password -> Text,
     }
 }
 
@@ -75,6 +74,7 @@ diesel::table! {
         username -> Varchar,
         registration_time -> Timestamp,
         is_public -> Bool,
+        email -> Nullable<Varchar>,
     }
 }
 

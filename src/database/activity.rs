@@ -1,12 +1,8 @@
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{
-    error::TimeError,
-    models::*,
-    requests::{DataRequest, HeartBeat},
-};
+use crate::{api::users::DataRequest, error::TimeError, models::*};
 
 impl super::DatabaseWrapper {
     pub async fn add_activity(

@@ -1,8 +1,8 @@
-use actix_web::{
-    error::{BlockingError, ResponseError},
-    http::{header::ContentType, StatusCode},
-    HttpResponse,
+use axum::{
+    Json,
+    response::{IntoResponse, Response},
 };
+use http::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,9 +14,9 @@ pub enum TimeError {
     #[error("Internal server error")]
     DieselConnectionError(#[from] diesel::result::ConnectionError),
     #[error(transparent)]
-    ActixError(#[from] actix_web::error::Error),
+    AxumError(#[from] axum::Error),
     #[error("User exists")]
-    UserExists,
+    UsernameTaken,
     #[error("User not found")]
     UserNotFound,
     #[error("You cannot add yourself")]
@@ -27,17 +27,17 @@ pub enum TimeError {
     LeaderboardNotFound,
     #[error("You are not authorized")]
     Unauthorized,
-    #[error("Missing secured access token")]
-    UnauthroizedSecuredAccess,
     #[error("Invalid username or password")]
     InvalidCredentials,
-    #[error(transparent)]
-    BlockingError(#[from] BlockingError),
     #[error("{0}")]
     InvalidLength(String),
-    #[error("Username has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
+    #[error(
+        "Username has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters"
+    )]
     BadUsername,
-    #[error("Leaderboard name has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters")]
+    #[error(
+        "Leaderboard name has to contain characters from [a-zA-Z0-9_] and has to be between 2 and 32 characters"
+    )]
     BadLeaderboardName,
     #[error("Bad id")]
     BadId,
@@ -57,39 +57,72 @@ pub enum TimeError {
     TooManyRegisters,
     #[error("The user has no active session")]
     NotActive,
+    #[error("Cannot connect to mail server")]
+    SmtpError(#[from] lettre::transport::smtp::Error),
+    #[error("Invalid password reset token")]
+    InvalidPasswordResetToken,
+    #[error("Invalid email")]
+    InvalidEmail,
+    #[error("Expired password reset token")]
+    ExpiredPasswordResetToken,
+    #[error("Account with this email exists")]
+    EmailTaken,
+    #[error("Password hashing failed")]
+    HashError(#[from] argon2::password_hash::Error),
+    #[error(transparent)]
+    HeaderError(#[from] http::header::ToStrError),
 }
 
-unsafe impl Send for TimeError {}
-
-impl ResponseError for TimeError {
-    fn status_code(&self) -> StatusCode {
+impl IntoResponse for TimeError {
+    fn into_response(self) -> Response {
         error!("{}", self);
-        match self {
+        let status_code = match self {
             TimeError::UserNotFound | TimeError::LeaderboardNotFound | TimeError::NotActive => {
                 StatusCode::NOT_FOUND
             }
             TimeError::BadUsername
             | TimeError::InvalidLength(_)
             | TimeError::BadId
-            | TimeError::BadLeaderboardName => StatusCode::BAD_REQUEST,
+            | TimeError::BadLeaderboardName
+            | TimeError::InvalidEmail
+            | TimeError::BadCode
+            | TimeError::HeaderError(_) => StatusCode::BAD_REQUEST,
             TimeError::CurrentUser | TimeError::NotMember | TimeError::LastAdmin => {
                 StatusCode::FORBIDDEN
             }
             TimeError::AlreadyFriends
             | TimeError::LeaderboardExists
             | TimeError::AlreadyMember
-            | TimeError::UserExists => StatusCode::CONFLICT,
+            | TimeError::UsernameTaken
+            | TimeError::EmailTaken => StatusCode::CONFLICT,
             TimeError::Unauthorized
             | TimeError::InvalidCredentials
-            | TimeError::UnauthroizedSecuredAccess => StatusCode::UNAUTHORIZED,
+            | TimeError::InvalidPasswordResetToken
+            | TimeError::ExpiredPasswordResetToken => StatusCode::UNAUTHORIZED,
             TimeError::TooManyRegisters => StatusCode::TOO_MANY_REQUESTS,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
+            TimeError::DieselError(_)
+            | TimeError::DieselConnectionError(_)
+            | TimeError::DeadpoolError(_)
+            | Self::AxumError(_)
+            | TimeError::UnknownError
+            | TimeError::SmtpError(_)
+            | TimeError::HashError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
 
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
-            .insert_header(ContentType::json())
-            .body(json!({ "error": self.to_string() }).to_string())
+        let body = Json(json!({"error": self.to_string()}));
+
+        (status_code, body).into_response()
+    }
+}
+
+impl TimeError {
+    pub fn is_unique_violation(&self) -> bool {
+        matches!(
+            self,
+            TimeError::DieselError(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                ..
+            ))
+        )
     }
 }

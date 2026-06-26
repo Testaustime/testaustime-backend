@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use itertools::Itertools;
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use lettre::Address;
+use rand::{Rng, distr::Alphanumeric, rng};
 
 use crate::models::CodingActivity;
 
-pub fn generate_token() -> String {
-    thread_rng()
+pub fn generate_auth_token() -> String {
+    rng()
         .sample_iter(&Alphanumeric)
         .take(32)
         .map(char::from)
@@ -14,9 +15,17 @@ pub fn generate_token() -> String {
 }
 
 pub fn generate_friend_code() -> String {
-    thread_rng()
+    rng()
         .sample_iter(&Alphanumeric)
         .take(24)
+        .map(char::from)
+        .collect()
+}
+
+pub fn generate_password_reset_token() -> String {
+    rng()
+        .sample_iter(&Alphanumeric)
+        .take(48)
         .map(char::from)
         .collect()
 }
@@ -30,4 +39,8 @@ pub fn group_by_language(iter: impl Iterator<Item = CodingActivity>) -> HashMap<
     })
     .into_grouping_map()
     .sum()
+}
+
+pub fn validate_email(email: &str) -> bool {
+    email.parse::<Address>().is_ok()
 }

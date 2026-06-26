@@ -1,4 +1,6 @@
-use actix_web::{HttpResponse, Responder};
+use std::sync::LazyLock;
+
+use http::StatusCode;
 use regex::Regex;
 
 pub mod account;
@@ -12,11 +14,20 @@ pub mod search;
 pub mod stats;
 pub mod users;
 
-thread_local! {
-    pub static REGEX: Regex = Regex::new("^[[:word:]]{2,32}$").unwrap();
-}
+pub static VALID_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("^[[:word:]]{2,32}$").expect("BUG: Infallible, hardcoded and tested")
+});
 
-#[get("/health")]
-async fn health() -> impl Responder {
-    HttpResponse::Ok()
+/// Check API health status.
+///
+/// Returns OK if the API is running and healthy.
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = OK, description = "API is healthy")
+    )
+)]
+pub async fn health() -> StatusCode {
+    StatusCode::OK
 }

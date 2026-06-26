@@ -22,7 +22,7 @@ impl super::DatabaseWrapper {
         creator_id: i32,
         name: &str,
     ) -> Result<String, TimeError> {
-        let code = crate::utils::generate_token();
+        let code = crate::utils::generate_auth_token();
 
         let board = NewLeaderboard {
             name: name.to_string(),
@@ -64,7 +64,7 @@ impl super::DatabaseWrapper {
     }
 
     pub async fn regenerate_leaderboard_invite(&self, lid: i32) -> Result<String, TimeError> {
-        let newinvite = crate::utils::generate_token();
+        let newinvite = crate::utils::generate_auth_token();
 
         let mut conn = self.db.get().await?;
 
@@ -89,7 +89,7 @@ impl super::DatabaseWrapper {
     }
 
     pub async fn get_leaderboard_id_by_name(&self, lname: &str) -> Result<i32, TimeError> {
-        sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+        define_sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
         use crate::schema::leaderboards::dsl::*;
 
         let mut conn = self.db.get().await?;
@@ -102,7 +102,7 @@ impl super::DatabaseWrapper {
     }
 
     pub async fn get_leaderboard(&self, lname: &str) -> Result<PrivateLeaderboard, TimeError> {
-        sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
+        define_sql_function!(fn lower(x: diesel::sql_types::Text) -> Text);
         let mut conn = self.db.get().await?;
 
         let board = {
@@ -126,7 +126,8 @@ impl super::DatabaseWrapper {
 
         let aweekago = NaiveDateTime::new(
             Local::now().date_naive() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .expect("BUG: Always a valid time"),
         );
 
         let members =
@@ -305,7 +306,8 @@ impl super::DatabaseWrapper {
 
         let aweekago = NaiveDateTime::new(
             Local::now().date_naive() - chrono::Duration::weeks(1),
-            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).unwrap(),
+            chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .expect("BUG: Always a valid time"),
         );
 
         // FIXME: We could maybe use limit here because we only need the

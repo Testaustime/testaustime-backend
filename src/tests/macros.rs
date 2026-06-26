@@ -1,38 +1,62 @@
 macro_rules! request {
-    ($app:expr, $addr:expr, $method:tt, $uri:expr) => {
-        TestRequest::$method()
-            .peer_addr($addr)
-            .uri($uri)
-            .send_request(&$app)
-            .await
+    ($app:ident, $method:tt, $uri:expr) => {
+        tower::Service::call(
+            ServiceExt::<Request<Body>>::ready(&mut $app).await.unwrap(),
+            Request::builder()
+                .uri($uri)
+                .method(http::Method::$method)
+                .extension(axum::extract::ConnectInfo(TEST_ADDR))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
     };
-    ($app:expr, $addr:expr, $method:tt, $uri:expr, $body:expr) => {
-        TestRequest::$method()
-            .peer_addr($addr)
-            .uri($uri)
-            .set_json(&$body)
-            .send_request(&$app)
-            .await
+    ($app:ident, $method:tt, $uri:expr, $body:expr) => {
+        tower::Service::call(
+            ServiceExt::<Request<Body>>::ready(&mut $app).await.unwrap(),
+            Request::builder()
+                .uri($uri)
+                .method(http::Method::$method)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .extension(axum::extract::ConnectInfo(TEST_ADDR))
+                .body(Body::from(serde_json::to_vec(&$body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
     };
 }
 
 macro_rules! request_auth {
-    ($app:expr, $addr:expr, $method:tt, $uri:expr, $token:expr) => {
-        TestRequest::$method()
-            .peer_addr($addr)
-            .uri($uri)
-            .insert_header(("authorization", "Bearer ".to_owned() + &$token))
-            .send_request(&$app)
-            .await
+    ($app:expr, $method:tt, $uri:expr, $token:expr) => {
+        tower::Service::call(
+            ServiceExt::<Request<Body>>::ready(&mut $app).await.unwrap(),
+            Request::builder()
+                .uri($uri)
+                .method(http::Method::$method)
+                .header("authorization", "Bearer ".to_owned() + &$token)
+                .extension(axum::extract::ConnectInfo(TEST_ADDR))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
     };
-    ($app:expr, $addr:expr, $method:tt, $uri:expr, $token:expr, $body:expr) => {
-        TestRequest::$method()
-            .peer_addr($addr)
-            .uri($uri)
-            .set_json(&$body)
-            .insert_header(("authorization", "Bearer ".to_owned() + &$token))
-            .send_request(&$app)
-            .await
+    ($app:expr, $method:tt, $uri:expr, $token:expr, $body:expr) => {
+        tower::Service::call(
+            ServiceExt::<Request<Body>>::ready(&mut $app).await.unwrap(),
+            Request::builder()
+                .uri($uri)
+                .method(http::Method::$method)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .header("authorization", "Bearer ".to_owned() + &$token)
+                .extension(axum::extract::ConnectInfo(TEST_ADDR))
+                .body(Body::from(serde_json::to_vec(&$body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
     };
 }
 

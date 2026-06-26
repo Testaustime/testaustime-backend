@@ -1,72 +1,77 @@
-use std::{net::IpAddr, rc::Rc, sync::Arc};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    task::{Context, Poll},
+};
 
-use actix_web::{
-    body::EitherBody,
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpResponse,
+use axum::{
+    body::Body,
+    extract::{ConnectInfo, Request},
+    response::Response,
 };
-use futures_util::future::LocalBoxFuture;
+use futures_util::future::BoxFuture;
 use governor::{
-    clock::DefaultClock, middleware::StateInformationMiddleware,
-    state::keyed::DefaultKeyedStateStore, RateLimiter,
+    RateLimiter, clock::DefaultClock, middleware::StateInformationMiddleware,
+    state::keyed::DefaultKeyedStateStore,
 };
-use http::{header::HeaderName, HeaderValue};
+use http::{
+    HeaderValue, StatusCode,
+    header::{FORWARDED, HeaderName},
+};
+use tower::{Layer, Service};
 
 type SharedRateLimiter<Key, M> =
     Arc<RateLimiter<Key, DefaultKeyedStateStore<Key>, DefaultClock, M>>;
 
+#[derive(Clone)]
 pub struct TestaustimeRateLimiter {
     pub limiter: SharedRateLimiter<IpAddr, StateInformationMiddleware>,
     pub use_peer_addr: bool,
     pub bypass_token: String,
 }
 
-impl<S, B> Transform<S, ServiceRequest> for TestaustimeRateLimiter
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<EitherBody<B>>;
-    type Error = Error;
-    type InitError = ();
-    type Transform = TestaustimeRateLimiterTransform<S>;
-    type Future = LocalBoxFuture<'static, Result<Self::Transform, Self::InitError>>;
+impl<S> Layer<S> for TestaustimeRateLimiter {
+    type Service = TestaustimeRateLimiterService<S>;
 
-    fn new_transform(&self, service: S) -> Self::Future {
-        let transform = Ok(Self::Transform {
-            service: Rc::new(service),
+    fn layer(&self, inner: S) -> Self::Service {
+        Self::Service {
+            inner,
             limiter: Arc::clone(&self.limiter),
             use_peer_addr: self.use_peer_addr,
             bypass_token: self.bypass_token.clone(),
-        });
-
-        Box::pin(async move { transform })
+        }
     }
 }
 
-pub struct TestaustimeRateLimiterTransform<S> {
-    service: Rc<S>,
+#[derive(Clone)]
+pub struct TestaustimeRateLimiterService<S> {
+    inner: S,
     limiter: SharedRateLimiter<IpAddr, StateInformationMiddleware>,
     use_peer_addr: bool,
     bypass_token: String,
 }
 
-impl<S, B> Service<ServiceRequest> for TestaustimeRateLimiterTransform<S>
+impl<S> Service<Request> for TestaustimeRateLimiterService<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
+    S: Service<Request, Response = Response>,
+    S::Future: Send + 'static,
 {
-    type Response = ServiceResponse<EitherBody<B>>;
+    type Response = S::Response;
     type Error = S::Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-    forward_ready!(service);
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let conn_info = req.connection_info().clone();
+    fn call(&mut self, req: Request) -> Self::Future {
         if let Some(ip) = {
+            let conn_info = req
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .expect("BUG: Tokio always provides connection info")
+                .ip();
+
             let bypass = req
                 .headers()
                 .get("bypass-token")
@@ -75,18 +80,27 @@ where
             let addr = if bypass {
                 req.headers()
                     .get("client-ip")
-                    .and_then(|ip| ip.to_str().ok())
+                    .and_then(|ip| ip.to_str().ok().and_then(|ip| ip.parse::<IpAddr>().ok()))
             } else if self.use_peer_addr {
-                conn_info.peer_addr()
+                Some(conn_info)
             } else {
-                conn_info.realip_remote_addr()
+                let header = req
+                    .headers()
+                    .get("x-forwarded-for")
+                    .or_else(|| req.headers().get(FORWARDED));
+
+                Some(
+                    header
+                        .and_then(|ip| ip.to_str().ok().and_then(|ip| ip.parse::<IpAddr>().ok()))
+                        .unwrap_or(conn_info),
+                )
             };
 
-            addr.and_then(|addr| addr.parse::<IpAddr>().ok())
+            addr
         } {
             match self.limiter.check_key(&ip) {
                 Ok(state) => {
-                    let res = self.service.call(req);
+                    let res = self.inner.call(req);
 
                     Box::pin(async move {
                         let mut res = res.await?;
@@ -97,42 +111,46 @@ where
 
                         headers.insert(
                             HeaderName::from_static("ratelimit-limit"),
-                            HeaderValue::from_str(&quota.burst_size().to_string())?,
+                            HeaderValue::from_str(&quota.burst_size().to_string())
+                                .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
                         headers.insert(
                             HeaderName::from_static("ratelimit-remaining"),
-                            HeaderValue::from_str(&state.remaining_burst_capacity().to_string())?,
+                            HeaderValue::from_str(&state.remaining_burst_capacity().to_string())
+                                .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
                         headers.insert(
                             HeaderName::from_static("ratelimit-reset"),
                             HeaderValue::from_str(
                                 &quota.replenish_interval().as_secs().to_string(),
-                            )?,
+                            )
+                            .expect("BUG: Integer to String is always a valid HeaderValue"),
                         );
 
-                        Ok(res.map_into_left_body())
+                        Ok(res)
                     })
                 }
                 Err(denied) => Box::pin(async move {
-                    let response = HttpResponse::TooManyRequests()
-                        .insert_header(("ratelimit-limit", denied.quota().burst_size().to_string()))
-                        .insert_header(("ratelimit-remaining", "0"))
-                        .insert_header((
+                    Ok(Response::builder()
+                        .status(StatusCode::TOO_MANY_REQUESTS)
+                        .header("ratelimit-limit", denied.quota().burst_size().to_string())
+                        .header("ratelimit-remaining", "0")
+                        .header(
                             "ratelimit-reset",
                             denied.quota().replenish_interval().as_secs().to_string(),
-                        ))
-                        .finish();
-
-                    Ok(req.into_response(response.map_into_right_body()))
+                        )
+                        .body(Body::empty())
+                        .expect("BUG: Integer to String is always a valid HeaderValue"))
                 }),
             }
         } else {
             Box::pin(async move {
-                Err(actix_web::error::ErrorInternalServerError(
-                    "Failed to get request ip (?)",
-                ))
+                Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .expect("BUG: Always valid"))
             })
         }
     }

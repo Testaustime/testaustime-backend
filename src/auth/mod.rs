@@ -1,107 +1,98 @@
-pub mod secured_access;
-
-use std::rc::Rc;
-
-use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::{ErrorInternalServerError, ErrorUnauthorized},
-    web::Data,
-    Error, FromRequest, HttpMessage,
+use std::{
+    mem,
+    task::{Context, Poll},
 };
-use futures::future::LocalBoxFuture;
 
-use self::secured_access::SecuredAccessTokenStorage;
-use crate::{database::DatabaseWrapper, models::UserIdentity};
+use axum::extract::Request;
+use futures_util::future::BoxFuture;
+use tower::{Layer, Service};
+
+use crate::{TestaustimeState, database::DatabaseWrapper, models::UserIdentity};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Authentication {
     NoAuth,
     AuthToken(UserIdentity),
-    SecuredAuthToken(UserIdentity),
 }
 
-pub struct AuthMiddleware;
-
-pub struct AuthMiddlewareTransform<S> {
-    service: Rc<S>,
+#[derive(Clone)]
+pub struct AuthMiddleware {
+    pub state: TestaustimeState,
 }
 
-impl<S, B> Transform<S, ServiceRequest> for AuthMiddleware
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<B>;
-    type Error = Error;
-    type InitError = ();
-    type Transform = AuthMiddlewareTransform<S>;
-    type Future = LocalBoxFuture<'static, Result<Self::Transform, Self::InitError>>;
+#[derive(Clone)]
+pub struct AuthMiddlewareService<S> {
+    inner: S,
+    state: TestaustimeState,
+}
 
-    fn new_transform(&self, service: S) -> Self::Future {
-        Box::pin(async move {
-            Ok(AuthMiddlewareTransform {
-                service: Rc::new(service),
-            })
-        })
+impl Authentication {
+    pub fn user(&self) -> Option<&UserIdentity> {
+        match self {
+            Authentication::NoAuth => None,
+            Authentication::AuthToken(user_identity) => Some(user_identity),
+        }
     }
 }
 
-impl<S, B> Service<ServiceRequest> for AuthMiddlewareTransform<S>
+impl<S> Layer<S> for AuthMiddleware {
+    type Service = AuthMiddlewareService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        AuthMiddlewareService {
+            inner,
+            state: self.state.clone(),
+        }
+    }
+}
+
+impl<S, B> Service<Request<B>> for AuthMiddlewareService<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
-    S::Future: 'static,
-    B: 'static,
+    S: Service<Request<B>> + Clone + 'static,
+    S::Future: Send + 'static,
+    S: Send + 'static,
+    B: Send + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = S::Response;
     type Error = S::Error;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-    forward_ready!(service);
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let db = DatabaseWrapper::extract(req.request());
-        let secured_access_storage = req
-            .app_data::<Data<SecuredAccessTokenStorage>>()
-            .expect("Secured token access storage not initialized")
-            .clone();
+    fn call(&mut self, mut req: Request<B>) -> Self::Future {
+        let db = DatabaseWrapper::from(&self.state.database);
         let auth = req.headers().get("Authorization").cloned();
-        let service = Rc::clone(&self.service);
+
+        let clone = self.inner.clone();
+        let mut inner = mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            if let Some(auth) = auth {
-                if let Some(token) = auth.to_str().unwrap().trim().strip_prefix("Bearer ") {
-                    let db = db.await.map_err(ErrorInternalServerError)?;
+            let auth = 'auth: {
+                let Some(auth) = auth else {
+                    break 'auth Authentication::NoAuth;
+                };
 
-                    if let Ok(secured_access_instance) = secured_access_storage.get(token).clone() {
-                        let user = db
-                            .get_user_by_id(secured_access_instance.user_id)
-                            .await
-                            .map_err(ErrorUnauthorized)?;
+                let Some(token) = auth
+                    .to_str()
+                    .ok()
+                    .and_then(|a| a.trim().strip_prefix("Bearer "))
+                else {
+                    break 'auth Authentication::NoAuth;
+                };
 
-                        req.extensions_mut()
-                            .insert(Authentication::SecuredAuthToken(user));
-                    } else {
-                        let user = db
-                            .get_user_by_token(token.to_string())
-                            .await
-                            .map_err(ErrorUnauthorized);
-
-                        if let Ok(user_identity) = user {
-                            req.extensions_mut()
-                                .insert(Authentication::AuthToken(user_identity));
-                        } else {
-                            req.extensions_mut().insert(Authentication::NoAuth);
-                        }
-                    }
+                if let Ok(user_identity) = db.get_user_by_token(token.to_string()).await {
+                    Authentication::AuthToken(user_identity)
                 } else {
-                    req.extensions_mut().insert(Authentication::NoAuth);
+                    Authentication::NoAuth
                 }
-            } else {
-                req.extensions_mut().insert(Authentication::NoAuth);
-            }
+            };
 
-            let resp = service.call(req).await?;
+            req.extensions_mut().insert(auth);
+
+            let resp = inner.call(req).await?;
+
             Ok(resp)
         })
     }

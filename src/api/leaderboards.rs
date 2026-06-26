@@ -1,37 +1,61 @@
-use actix_web::{
-    error::*,
-    web::{self, Json, Path},
-    HttpResponse, Responder,
-};
-use diesel::result::DatabaseErrorKind;
+use axum::{Json, extract::Path};
+use diesel::result::{DatabaseErrorKind, Error as DieselError};
+use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::{
-    api::auth::SecuredUserIdentity, database::DatabaseWrapper, error::TimeError, models::UserId,
+    database::DatabaseWrapper,
+    error::TimeError,
+    models::{PrivateLeaderboard, UserId, UserIdentity},
 };
 
-#[derive(Deserialize, Serialize)]
-pub struct LeaderboardName {
+use super::users::MinimalLeaderboard;
+
+/// Request body for creating a leaderboard.
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct LeaderboardCreateRequest {
+    /// Name of the leaderboard (2-32 alphanumeric characters).
     pub name: String,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct LeaderboardInvite {
-    pub invite: String,
-}
-
-#[derive(Deserialize)]
+/// Request body specifying a leaderboard member.
+#[derive(Deserialize, ToSchema)]
 pub struct LeaderboardUser {
+    /// Username of the target member.
     pub user: String,
 }
 
-#[post("/leaderboards/create")]
+/// Response from leaderboard creation.
+#[derive(Serialize, ToSchema)]
+pub struct LeaderboardCreateResponse {
+    /// The invite code for others to join (starts with ttlic_).
+    invite_code: String,
+}
+
+/// Create a new leaderboard.
+///
+/// Creates a leaderboard with the authenticated user as admin. Returns an invite code for others to join.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/create",
+    request_body = LeaderboardCreateRequest,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Leaderboard created", body = LeaderboardCreateResponse),
+        (status = 400, description = "Invalid leaderboard name"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Leaderboard name already exists"),
+    )
+)]
 pub async fn create_leaderboard(
     creator: UserId,
-    body: Json<LeaderboardName>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
-    if !super::REGEX.with(|r| r.is_match(&body.name)) {
+    body: Json<LeaderboardCreateRequest>,
+) -> Result<Json<LeaderboardCreateResponse>, TimeError> {
+    if !super::VALID_NAME_REGEX.is_match(&body.name) {
         return Err(TimeError::BadLeaderboardName);
     }
 
@@ -40,11 +64,11 @@ pub async fn create_leaderboard(
     }
 
     match db.create_leaderboard(creator.id, &body.name).await {
-        Ok(code) => Ok(web::Json(json!({ "invite_code": code }))),
+        Ok(code) => Ok(Json(LeaderboardCreateResponse { invite_code: code })),
         Err(e) => {
             error!("{}", e);
             Err(match e {
-                TimeError::DieselError(diesel::result::Error::DatabaseError(
+                TimeError::DieselError(DieselError::DatabaseError(
                     DatabaseErrorKind::UniqueViolation,
                     ..,
                 )) => TimeError::LeaderboardExists,
@@ -54,50 +78,107 @@ pub async fn create_leaderboard(
     }
 }
 
-#[get("/leaderboards/{name}")]
+/// Get leaderboard details and members.
+///
+/// Returns the leaderboard with all members and their coding times. Only accessible to members.
+#[utoipa::path(
+    get,
+    path = "/leaderboards/{name}",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Leaderboard retrieved", body = PrivateLeaderboard),
+        (status = 401, description = "Unauthorized or not a member"),
+        (status = 404, description = "Leaderboard not found"),
+    )
+)]
 pub async fn get_leaderboard(
     user: UserId,
-    path: Path<(String,)>,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+) -> Result<Json<PrivateLeaderboard>, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
     if db.is_leaderboard_member(user.id, lid).await? {
-        let board = db.get_leaderboard(&path.0).await?;
-        Ok(web::Json(board))
+        let board = db.get_leaderboard(&name).await?;
+        Ok(Json(board))
     } else {
         Err(TimeError::Unauthorized)
     }
 }
 
-#[delete("/leaderboards/{name}")]
+/// Delete a leaderboard.
+///
+/// Permanently deletes the leaderboard. Only accessible to admins.
+#[utoipa::path(
+    delete,
+    path = "/leaderboards/{name}",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Leaderboard deleted"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard not found"),
+    )
+)]
 pub async fn delete_leaderboard(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
-        db.delete_leaderboard(&path.0).await?;
-        Ok(HttpResponse::Ok().finish())
+    if db.is_leaderboard_admin(user.id, lid).await? {
+        db.delete_leaderboard(&name).await?;
+        Ok(StatusCode::OK)
     } else {
         Err(TimeError::Unauthorized)
     }
 }
 
-#[post("/leaderboards/join")]
+/// Request body for joining a leaderboard.
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct LeaderboardInvite {
+    /// The invite code (starts with ttlic_).
+    pub invite: String,
+}
+
+/// Join a leaderboard with invite code.
+///
+/// Invite codes start with `ttlic_`. Returns basic leaderboard info on success.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/join",
+    request_body = LeaderboardInvite,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Joined leaderboard", body = MinimalLeaderboard),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Invalid invite code"),
+        (status = 409, description = "Already a member"),
+    )
+)]
 pub async fn join_leaderboard(
     user: UserId,
-    body: Json<LeaderboardInvite>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+    body: Json<LeaderboardInvite>,
+) -> Result<Json<MinimalLeaderboard>, TimeError> {
     match db
         .add_user_to_leaderboard(user.id, body.invite.trim().trim_start_matches("ttlic_"))
         .await
@@ -105,60 +186,91 @@ pub async fn join_leaderboard(
         Err(e) => {
             error!("{}", e);
             Err(match e {
-                TimeError::DieselError(diesel::result::Error::DatabaseError(
+                TimeError::DieselError(DieselError::DatabaseError(
                     DatabaseErrorKind::UniqueViolation,
                     ..,
                 )) => TimeError::AlreadyMember,
-                TimeError::DieselError(diesel::result::Error::NotFound) => {
-                    TimeError::LeaderboardNotFound
-                }
+                TimeError::DieselError(DieselError::NotFound) => TimeError::LeaderboardNotFound,
                 _ => e,
             })
         }
-        Ok(leaderboard) => Ok(web::Json(json!(leaderboard))),
+        Ok(leaderboard) => Ok(Json(leaderboard)),
     }
 }
 
-#[post("/leaderboards/{name}/leave")]
+/// Leave a leaderboard.
+///
+/// Removes the user from the leaderboard. Admins cannot leave if they are the last admin.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/leave",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = []),
+    ),
+    responses(
+        (status = OK, description = "Left leaderboard"),
+        (status = 400, description = "Cannot leave as last admin"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Leaderboard not found or not a member"),
+    )
+)]
 pub async fn leave_leaderboard(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await?
+    if db.is_leaderboard_admin(user.id, lid).await?
         && db.get_leaderboard_admin_count(lid).await? == 1
     {
         return Err(TimeError::LastAdmin);
     }
 
-    if db
-        .remove_user_from_leaderboard(lid, user.identity.id)
-        .await?
-    {
-        Ok(HttpResponse::Ok().finish())
+    if db.remove_user_from_leaderboard(lid, user.id).await? {
+        Ok(StatusCode::OK)
     } else {
         Err(TimeError::NotMember)
     }
 }
 
-#[post("/leaderboards/{name}/promote")]
+/// Promote a member to admin.
+///
+/// Only accessible to existing admins. The promoted user gains admin privileges.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/promote",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    request_body = LeaderboardUser,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Member promoted to admin"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
+    )
+)]
 pub async fn promote_member(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
     promotion: Json<LeaderboardUser>,
-) -> Result<impl Responder, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let newadmin = db
             .get_user_by_name(&promotion.user)
             .await
@@ -168,7 +280,7 @@ pub async fn promote_member(
             .promote_user_to_leaderboard_admin(lid, newadmin.id)
             .await?
         {
-            Ok(HttpResponse::Ok().finish())
+            Ok(StatusCode::OK)
         } else {
             // FIXME: This is not correct
             Err(TimeError::NotMember)
@@ -178,19 +290,37 @@ pub async fn promote_member(
     }
 }
 
-#[post("/leaderboards/{name}/demote")]
+/// Demote an admin to member.
+///
+/// Only accessible to existing admins. The demoted user loses admin privileges.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/demote",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    request_body = LeaderboardUser,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Admin demoted to member"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
+    )
+)]
 pub async fn demote_member(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
     demotion: Json<LeaderboardUser>,
-) -> Result<impl Responder, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let oldadmin = db
             .get_user_by_name(&demotion.user)
             .await
@@ -200,7 +330,7 @@ pub async fn demote_member(
             .demote_user_to_leaderboard_member(lid, oldadmin.id)
             .await?
         {
-            Ok(HttpResponse::Ok().finish())
+            Ok(StatusCode::OK)
         } else {
             // FIXME: This is not correct
             Err(TimeError::NotMember)
@@ -210,19 +340,37 @@ pub async fn demote_member(
     }
 }
 
-#[post("/leaderboards/{name}/kick")]
+/// Remove a member from leaderboard.
+///
+/// Only accessible to admins. Removes the specified user from the leaderboard.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/kick",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    request_body = LeaderboardUser,
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "Member removed from leaderboard"),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard or user not found"),
+    )
+)]
 pub async fn kick_member(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
     kick: Json<LeaderboardUser>,
-) -> Result<impl Responder, TimeError> {
+) -> Result<StatusCode, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let kmember = db
             .get_user_by_name(&kick.user)
             .await
@@ -231,26 +379,50 @@ pub async fn kick_member(
         db.remove_user_from_leaderboard(lid, kmember.id)
             .await
             .map_err(|_| TimeError::NotMember)?;
-        Ok(HttpResponse::Ok().finish())
+        Ok(StatusCode::OK)
     } else {
         Err(TimeError::Unauthorized)
     }
 }
 
-#[post("/leaderboards/{name}/regenerate")]
+/// Response containing the newly generated invite code.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct InviteCodeRegenerateResponse {
+    /// The new invite code (starts with ttlic_).
+    invite_code: String,
+}
+
+/// Generate new leaderboard invite code.
+///
+/// Only accessible to admins. Invalidates the previous invite code.
+#[utoipa::path(
+    post,
+    path = "/leaderboards/{name}/regenerate",
+    params(
+        ("name", description = "Leaderboard name")
+    ),
+    security(
+        ("api_key" = [])
+    ),
+    responses(
+        (status = OK, description = "New invite code generated", body = InviteCodeRegenerateResponse),
+        (status = 401, description = "Unauthorized or not an admin"),
+        (status = 404, description = "Leaderboard not found"),
+    )
+)]
 pub async fn regenerate_invite(
-    user: SecuredUserIdentity,
-    path: Path<(String,)>,
+    user: UserIdentity,
+    Path(name): Path<String>,
     db: DatabaseWrapper,
-) -> Result<impl Responder, TimeError> {
+) -> Result<Json<InviteCodeRegenerateResponse>, TimeError> {
     let lid = db
-        .get_leaderboard_id_by_name(&path.0)
+        .get_leaderboard_id_by_name(&name)
         .await
         .map_err(|_| TimeError::LeaderboardNotFound)?;
 
-    if db.is_leaderboard_admin(user.identity.id, lid).await? {
+    if db.is_leaderboard_admin(user.id, lid).await? {
         let code = db.regenerate_leaderboard_invite(lid).await?;
-        Ok(web::Json(json!({ "invite_code": code })))
+        Ok(Json(InviteCodeRegenerateResponse { invite_code: code }))
     } else {
         Err(TimeError::Unauthorized)
     }

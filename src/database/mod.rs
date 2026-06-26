@@ -1,15 +1,16 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
-use actix_web::{dev::Payload, web::Data, FromRequest, HttpRequest};
+use axum::extract::{FromRef, FromRequestParts};
 use diesel_async::{
-    pooled_connection::{
-        deadpool::{Object, Pool},
-        AsyncDieselConnectionManager,
-    },
     AsyncPgConnection,
+    pooled_connection::{
+        AsyncDieselConnectionManager,
+        deadpool::{Object, Pool},
+    },
 };
+use http::request::Parts;
 
-use crate::error::TimeError;
+use crate::{TestaustimeState, error::TimeError};
 
 pub mod activity;
 pub mod auth;
@@ -27,20 +28,27 @@ pub struct DatabaseWrapper {
     db: Arc<Database>,
 }
 
-impl FromRequest for DatabaseWrapper {
-    type Error = TimeError;
-    type Future = Pin<Box<dyn Future<Output = actix_web::Result<Self, Self::Error>>>>;
+impl From<&Arc<Database>> for DatabaseWrapper {
+    fn from(value: &Arc<Database>) -> Self {
+        Self {
+            db: Arc::clone(value),
+        }
+    }
+}
 
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+impl<S: Send + Sync> FromRequestParts<S> for DatabaseWrapper
+where
+    TestaustimeState: FromRef<S>,
+{
+    type Rejection = TimeError;
+
+    async fn from_request_parts(_parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let state = TestaustimeState::from_ref(state);
         let wrapper = DatabaseWrapper {
-            db: req
-                .app_data::<Data<Database>>()
-                .unwrap()
-                .clone()
-                .into_inner(),
+            db: Arc::clone(&state.database),
         };
 
-        Box::pin(async move { Ok(wrapper) })
+        Ok(wrapper)
     }
 }
 
